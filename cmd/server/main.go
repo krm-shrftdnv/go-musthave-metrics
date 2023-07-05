@@ -24,24 +24,24 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/update/", updateMetric)
 	mux.HandleFunc("/state/gauge", func(w http.ResponseWriter, r *http.Request) {
-		gaugeJson, err := json.Marshal(gaugeStorage.GetAll())
+		gaugeJSON, err := json.Marshal(gaugeStorage.GetAll())
 		if err != nil {
 			w.Write([]byte(err.Error()))
 			return
 		}
 		w.Header().Set("content-type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(gaugeJson)
+		w.Write(gaugeJSON)
 	})
 	mux.HandleFunc("/state/counter", func(w http.ResponseWriter, r *http.Request) {
-		counterJson, err := json.Marshal(counterStorage.GetAll())
+		counterJSON, err := json.Marshal(counterStorage.GetAll())
 		if err != nil {
 			w.Write([]byte(err.Error()))
 			return
 		}
 		w.Header().Set("content-type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(counterJson)
+		w.Write(counterJSON)
 	})
 	mux.HandleFunc(`/`, http.NotFound)
 
