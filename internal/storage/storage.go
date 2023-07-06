@@ -1,4 +1,4 @@
-package internal
+package storage
 
 type Element interface {
 	int64 | float64

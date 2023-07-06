@@ -2,26 +2,27 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-type Metric string
+type MetricType string
 
 const (
-	Gauge   Metric = "gauge"
-	Counter Metric = "counter"
+	gauge   MetricType = "gauge"
+	counter MetricType = "counter"
 )
 
-var counterStorage = internal.MemStorage[int64]{}
-var gaugeStorage = internal.MemStorage[float64]{}
+var counterStorage = storage.MemStorage[int64]{}
+var gaugeStorage = storage.MemStorage[float64]{}
 
 func main() {
 	counterStorage.Init()
 	gaugeStorage.Init()
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/update/", updateMetric)
 	mux.HandleFunc("/state/gauge", func(w http.ResponseWriter, r *http.Request) {
 		gaugeJSON, err := json.Marshal(gaugeStorage.GetAll())
@@ -65,15 +66,15 @@ func updateMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := pathParts[1]
 	key := pathParts[2]
 	value := pathParts[3]
-	switch Metric(metricType) {
-	case Gauge:
+	switch MetricType(metricType) {
+	case gauge:
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			http.Error(w, "Value should be float", http.StatusBadRequest)
 			return
 		}
 		addGauge(key, value)
-	case Counter:
+	case counter:
 		value, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			http.Error(w, "Value should be int", http.StatusBadRequest)
