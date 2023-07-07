@@ -59,9 +59,19 @@ func main() {
 			Name: metricName,
 		}
 	}
+	go func() {
+		for {
+			poll()
+		}
+	}()
+	go func() {
+		for {
+			sendMetrics()
+		}
+	}()
 	for {
-		poll()
-		sendMetrics()
+		println("Collecting metrics...")
+		time.Sleep(5 * time.Second)
 	}
 }
 
