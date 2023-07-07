@@ -1,7 +1,9 @@
 package storage
 
+import "github.com/krm-shrftdnv/go-musthave-metrics/internal"
+
 type Element interface {
-	int64 | float64
+	internal.MetricType
 }
 
 type Storage[T Element] interface {

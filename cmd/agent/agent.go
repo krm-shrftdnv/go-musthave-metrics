@@ -13,7 +13,7 @@ import (
 const (
 	pollInterval   = 2
 	reportInterval = 10
-	serverHost     = "http://localhost:8080"
+	serverAddress  = "http://localhost:8080"
 )
 
 var m runtime.MemStats
@@ -153,7 +153,7 @@ func sendMetrics() {
 
 		req, err := http.NewRequest(
 			"POST",
-			fmt.Sprintf("%s/update/%s/%s/%v", serverHost, metric.Value.GetTypeName(), metric.Name, metric.Value),
+			fmt.Sprintf("%s/update/%s/%s/%v", serverAddress, metric.Value.GetTypeName(), metric.Name, metric.Value),
 			nil)
 		if err != nil {
 			log.Fatalln(err)
@@ -166,7 +166,7 @@ func sendMetrics() {
 	}
 	req, err := http.NewRequest(
 		"POST",
-		fmt.Sprintf("%s/update/%s/pollCount/%v", serverHost, pollCount.Value.GetTypeName(), pollCount.Value),
+		fmt.Sprintf("%s/update/%s/pollCount/%v", serverAddress, pollCount.Value.GetTypeName(), pollCount.Value),
 		nil)
 	if err != nil {
 		log.Fatalln(err)

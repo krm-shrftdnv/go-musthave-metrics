@@ -3,8 +3,8 @@ package internal
 type MetricTypeName string
 
 const (
-	gaugeName   MetricTypeName = "gauge"
-	counterName MetricTypeName = "counter"
+	GaugeName   MetricTypeName = "gauge"
+	CounterName MetricTypeName = "counter"
 )
 
 type Gauge float64
@@ -20,9 +20,9 @@ type Metric[T MetricType] struct {
 }
 
 func (g Gauge) GetTypeName() MetricTypeName {
-	return gaugeName
+	return GaugeName
 }
 
 func (c Counter) GetTypeName() MetricTypeName {
-	return counterName
+	return CounterName
 }
