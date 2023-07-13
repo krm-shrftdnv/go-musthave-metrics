@@ -159,7 +159,11 @@ func sendMetrics() {
 			log.Fatalln(err)
 		}
 		req.Header.Set("Content-Type", "text/plain")
-		_, err = client.Do(req)
+		res, err := client.Do(req)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = res.Body.Close()
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -172,7 +176,11 @@ func sendMetrics() {
 		log.Fatalln(err)
 	}
 	req.Header.Set("Content-Type", "text/plain")
-	_, err = client.Do(req)
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	err = res.Body.Close()
 	if err != nil {
 		log.Fatalln(err)
 	}

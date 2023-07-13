@@ -85,10 +85,9 @@ func TestStorageStateHandler_ServeHTTP(t *testing.T) {
 			err = result.Body.Close()
 			require.NoError(t, err)
 
-			err = json.Unmarshal(gaugeStateResult, &gaugeStorage)
+			err = json.Unmarshal(gaugeStateResult, &map[string]internal.Gauge{})
 			require.NoError(t, err)
 
-			require.NoError(t, err)
 			assert.JSONEq(t, string(gaugeStateResult), tt.want.response)
 		})
 	}
@@ -109,7 +108,7 @@ func TestStorageStateHandler_ServeHTTP(t *testing.T) {
 			err = result.Body.Close()
 			require.NoError(t, err)
 
-			err = json.Unmarshal(counterStateResult, &counterStorage)
+			err = json.Unmarshal(counterStateResult, &map[string]internal.Counter{})
 			require.NoError(t, err)
 
 			require.NoError(t, err)
@@ -242,6 +241,10 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 
 			result := w.Result()
 			assert.Equal(t, tt.want.code, result.StatusCode)
+			err := result.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 	for _, tt := range counterMetricUpdateTests {
@@ -254,6 +257,10 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 
 			result := w.Result()
 			assert.Equal(t, tt.want.code, result.StatusCode)
+			err := result.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }
