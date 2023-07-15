@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/handlers"
@@ -11,7 +12,14 @@ import (
 var counterStorage = storage.MemStorage[internal.Counter]{}
 var gaugeStorage = storage.MemStorage[internal.Gauge]{}
 
+func run(handler http.Handler) error {
+	fmt.Println("Running server on ", flagRunAddr)
+	return http.ListenAndServe(flagRunAddr, handler)
+}
+
 func main() {
+	parseFlags()
+
 	counterStorage.Init()
 	gaugeStorage.Init()
 
@@ -34,7 +42,7 @@ func main() {
 	r.Handle("/value/{metricType}/{metricName}", &metricStateHandler)
 	r.Handle("/", &storageStateHandler)
 
-	err := http.ListenAndServe(`:8080`, r)
+	err := run(r)
 	if err != nil {
 		panic(err)
 	}

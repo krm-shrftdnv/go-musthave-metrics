@@ -10,12 +10,6 @@ import (
 	"time"
 )
 
-const (
-	pollInterval   = 2
-	reportInterval = 10
-	serverAddress  = "http://localhost:8080"
-)
-
 var m runtime.MemStats
 var metricNames = []string{
 	"Alloc",
@@ -54,6 +48,7 @@ var pollCount = internal.Metric[internal.Counter]{
 var gaugeMetrics = map[string]*internal.Metric[internal.Gauge]{}
 
 func main() {
+	parseFlags()
 	for _, metricName := range metricNames {
 		gaugeMetrics[metricName] = &internal.Metric[internal.Gauge]{
 			Name: metricName,
@@ -71,7 +66,7 @@ func poll() {
 	for _, metricName := range metricNames {
 		updateMetric(metricName)
 	}
-	time.Sleep(pollInterval * time.Second)
+	time.Sleep(time.Duration(pollInterval) * time.Second)
 }
 
 func updateMetric(name string) {
@@ -163,5 +158,5 @@ func sendMetrics() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	time.Sleep(reportInterval * time.Second)
+	time.Sleep(time.Duration(reportInterval) * time.Second)
 }
