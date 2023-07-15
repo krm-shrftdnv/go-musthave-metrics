@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"log"
 	"math/rand"
-	"net/http"
 	"runtime"
 	"time"
 )
@@ -141,7 +141,7 @@ func updateMetric(name string) {
 }
 
 func sendMetrics() {
-	client := http.Client{}
+	client := resty.New()
 	for _, metricName := range metricNames {
 		metric, ok := gaugeMetrics[metricName]
 		if !ok {
@@ -150,37 +150,16 @@ func sendMetrics() {
 		if metricName == "RandomValue" {
 			_ = 1
 		}
-
-		req, err := http.NewRequest(
-			"POST",
-			fmt.Sprintf("%s/update/%s/%s/%v", serverAddress, metric.Value.GetTypeName(), metric.Name, metric.Value),
-			nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		req.Header.Set("Content-Type", "text/plain")
-		res, err := client.Do(req)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = res.Body.Close()
+		_, err := client.R().
+			SetHeader("Content-Type", "text/plain").
+			Post(fmt.Sprintf("%s/update/%s/%s/%v", serverAddress, metric.Value.GetTypeName(), metric.Name, metric.Value))
 		if err != nil {
 			log.Fatalln(err)
 		}
 	}
-	req, err := http.NewRequest(
-		"POST",
-		fmt.Sprintf("%s/update/%s/pollCount/%v", serverAddress, pollCount.Value.GetTypeName(), pollCount.Value),
-		nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	req.Header.Set("Content-Type", "text/plain")
-	res, err := client.Do(req)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	err = res.Body.Close()
+	_, err := client.R().
+		SetHeader("Content-Type", "text/plain").
+		Post(fmt.Sprintf("%s/update/%s/pollCount/%v", serverAddress, pollCount.Value.GetTypeName(), pollCount.Value))
 	if err != nil {
 		log.Fatalln(err)
 	}

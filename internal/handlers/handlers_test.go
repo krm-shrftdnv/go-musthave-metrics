@@ -1,13 +1,12 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,114 +15,82 @@ import (
 )
 
 func TestStorageStateHandler_ServeHTTP(t *testing.T) {
-	type want struct {
-		code        int
-		response    string
-		contentType string
-	}
-	type gaugeStateTestCase struct {
-		name    string
-		h       StorageStateHandler[internal.Gauge]
-		want    want
-		request string
-	}
-	type counterStateTestCase struct {
-		name    string
-		h       StorageStateHandler[internal.Counter]
-		want    want
-		request string
-	}
 	var gaugeStorage storage.MemStorage[internal.Gauge]
 	var counterStorage storage.MemStorage[internal.Counter]
 	gaugeStorage.Init()
 	counterStorage.Init()
 
-	gaugeStateHandler := StorageStateHandler[internal.Gauge]{
-		Storage: &gaugeStorage,
+	storageStateHandler := StorageStateHandler{
+		GaugeStorage:   &gaugeStorage,
+		CounterStorage: &counterStorage,
 	}
-	counterStateHandler := StorageStateHandler[internal.Counter]{
-		Storage: &counterStorage,
+	srv := httptest.NewServer(&storageStateHandler)
+	defer srv.Close()
+
+	type want struct {
+		code         int
+		responseBody string
+		contentType  string
 	}
-	gaugeStateTests := []gaugeStateTestCase{
+	type stateTestCase struct {
+		name   string
+		method string
+		want   want
+	}
+	stateTests := []stateTestCase{
 		{
-			name: "success gauge",
-			h:    gaugeStateHandler,
+			name:   "success",
+			method: http.MethodGet,
 			want: want{
-				code:        http.StatusOK,
-				response:    "{}",
-				contentType: "application/json",
+				code:         http.StatusOK,
+				responseBody: "\n",
+				contentType:  "text/plain",
 			},
-			request: "/state/gauge",
+		},
+		{
+			name:   "gauge wrong method post",
+			method: http.MethodPost,
+			want:   want{code: http.StatusMethodNotAllowed},
+		},
+		{
+			name:   "gauge wrong method put",
+			method: http.MethodPut,
+			want:   want{code: http.StatusMethodNotAllowed},
+		},
+		{
+			name:   "gauge wrong method delete",
+			method: http.MethodDelete,
+			want:   want{code: http.StatusMethodNotAllowed},
 		},
 	}
-	counterStateTests := []counterStateTestCase{
-		{
-			name: "success counter",
-			h:    counterStateHandler,
-			want: want{
-				code:        http.StatusOK,
-				response:    "{}",
-				contentType: "application/json",
-			},
-			request: "/state/counter",
-		},
-	}
-	for _, tt := range gaugeStateTests {
+	for _, tt := range stateTests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, tt.request, nil)
-			w := httptest.NewRecorder()
-			h := http.HandlerFunc(gaugeStateHandler.ServeHTTP)
-			h(w, request)
+			req := resty.New().R()
+			req.Method = tt.method
+			req.URL = srv.URL
 
-			result := w.Result()
+			resp, err := req.Send()
+			assert.NoError(t, err, "error making HTTP request")
 
-			assert.Equal(t, tt.want.code, result.StatusCode)
-			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
-
-			gaugeStateResult, err := io.ReadAll(result.Body)
-			require.NoError(t, err)
-			err = result.Body.Close()
-			require.NoError(t, err)
-
-			err = json.Unmarshal(gaugeStateResult, &map[string]internal.Gauge{})
-			require.NoError(t, err)
-
-			assert.JSONEq(t, string(gaugeStateResult), tt.want.response)
-		})
-	}
-	for _, tt := range counterStateTests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, tt.request, nil)
-			w := httptest.NewRecorder()
-			h := http.HandlerFunc(counterStateHandler.ServeHTTP)
-			h(w, request)
-
-			result := w.Result()
-
-			assert.Equal(t, tt.want.code, result.StatusCode)
-			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
-
-			counterStateResult, err := io.ReadAll(result.Body)
-			require.NoError(t, err)
-			err = result.Body.Close()
-			require.NoError(t, err)
-
-			err = json.Unmarshal(counterStateResult, &map[string]internal.Counter{})
-			require.NoError(t, err)
-
-			require.NoError(t, err)
-			assert.JSONEq(t, string(counterStateResult), tt.want.response)
+			assert.Equal(t, tt.want.code, resp.StatusCode(), "Response code didn't match expected")
+			if tt.want.responseBody != "" {
+				assert.Equal(t, tt.want.responseBody, string(resp.Body()))
+			}
 		})
 	}
 }
 
 func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
+	var gaugeStorage storage.MemStorage[internal.Gauge]
+	var counterStorage storage.MemStorage[internal.Counter]
+	gaugeStorage.Init()
+	counterStorage.Init()
+
 	type want struct {
 		code int
 	}
 	type updateMetricTestCase struct {
 		name           string
-		h              UpdateMetricHandler
 		want           want
 		method         string
 		request        string
@@ -132,19 +99,18 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		metricValue    string
 	}
 
-	var gaugeStorage storage.MemStorage[internal.Gauge]
-	var counterStorage storage.MemStorage[internal.Counter]
-	gaugeStorage.Init()
-	counterStorage.Init()
-
 	updateMetricHandler := UpdateMetricHandler{
 		GaugeStorage:   &gaugeStorage,
 		CounterStorage: &counterStorage,
 	}
-	gaugeUpdateMetricTests := []updateMetricTestCase{
+	r := chi.NewRouter()
+	r.Handle("/update/{metricType}/{metricName}/{metricValue}", &updateMetricHandler)
+	updateMetricSrv := httptest.NewServer(r)
+	defer updateMetricSrv.Close()
+
+	updateMetricTests := []updateMetricTestCase{
 		{
 			name: "success gauge update",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusOK,
 			},
@@ -156,7 +122,6 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "gauge wrong method",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusMethodNotAllowed,
 			},
@@ -168,7 +133,6 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "gauge wrong path",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusNotFound,
 			},
@@ -177,7 +141,6 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "gauge wrong value",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusBadRequest,
 			},
@@ -189,7 +152,6 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "gauge wrong type",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusBadRequest,
 			},
@@ -199,11 +161,8 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 			metricName:     "metric1",
 			metricValue:    strconv.FormatFloat(123.45, 'f', -1, 64),
 		},
-	}
-	counterMetricUpdateTests := []updateMetricTestCase{
 		{
 			name: "counter success update",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusOK,
 			},
@@ -215,7 +174,6 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "counter wrong value",
-			h:    updateMetricHandler,
 			want: want{
 				code: http.StatusBadRequest,
 			},
@@ -226,7 +184,7 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 			metricValue:    "value2",
 		},
 	}
-	for _, tt := range gaugeUpdateMetricTests {
+	for _, tt := range updateMetricTests {
 		t.Run(tt.name, func(t *testing.T) {
 			var target string
 			if strings.Count(tt.request, "%s") > 0 {
@@ -234,32 +192,116 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 			} else {
 				target = tt.request
 			}
-			request := httptest.NewRequest(tt.method, target, nil)
-			w := httptest.NewRecorder()
-			h := http.HandlerFunc(updateMetricHandler.ServeHTTP)
-			h(w, request)
+			req := resty.New().R()
+			req.Method = tt.method
+			req.URL = fmt.Sprintf("%s%s", updateMetricSrv.URL, target)
 
-			result := w.Result()
-			assert.Equal(t, tt.want.code, result.StatusCode)
-			err := result.Body.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
+			resp, err := req.Send()
+			assert.NoError(t, err, "error making HTTP request")
+			assert.Equal(t, tt.want.code, resp.StatusCode(), "Response code didn't match expected")
 		})
 	}
-	for _, tt := range counterMetricUpdateTests {
-		t.Run(tt.name, func(t *testing.T) {
-			target := fmt.Sprintf(tt.request, tt.metricTypeName, tt.metricName, tt.metricValue)
-			request := httptest.NewRequest(tt.method, target, nil)
-			w := httptest.NewRecorder()
-			h := http.HandlerFunc(updateMetricHandler.ServeHTTP)
-			h(w, request)
+}
 
-			result := w.Result()
-			assert.Equal(t, tt.want.code, result.StatusCode)
-			err := result.Body.Close()
-			if err != nil {
-				t.Fatal(err)
+func TestMetricStateHandler_ServeHTTP(t *testing.T) {
+	var gaugeStorage storage.MemStorage[internal.Gauge]
+	var counterStorage storage.MemStorage[internal.Counter]
+	gaugeStorage.Init()
+	counterStorage.Init()
+
+	metricName1 := "metric1"
+	metricValue1 := internal.Gauge(123)
+	metricName2 := "metric2"
+	metricValue2 := internal.Counter(123)
+	metricName3 := "metric3"
+	gaugeStorage.Set(metricName1, metricValue1)
+	counterStorage.Set(metricName2, metricValue2)
+
+	metricStateHandler := MetricStateHandler{
+		GaugeStorage:   &gaugeStorage,
+		CounterStorage: &counterStorage,
+	}
+	r := chi.NewRouter()
+	r.Handle("/value/{metricType}/{metricName}", &metricStateHandler)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	type want struct {
+		code         int
+		responseBody string
+		contentType  string
+	}
+	type metricStateTestCase struct {
+		name       string
+		method     string
+		metricName string
+		metricType string
+		want       want
+	}
+	metricStateTests := []metricStateTestCase{
+		{
+			name:       "success gauge",
+			method:     http.MethodGet,
+			metricName: metricName1,
+			metricType: string(internal.GaugeName),
+			want: want{
+				code:         http.StatusOK,
+				responseBody: metricValue1.String(),
+				contentType:  "text/plain",
+			},
+		},
+		{
+			name:       "success counter",
+			method:     http.MethodGet,
+			metricName: metricName2,
+			metricType: string(internal.CounterName),
+			want: want{
+				code:         http.StatusOK,
+				responseBody: metricValue2.String(),
+				contentType:  "text/plain",
+			},
+		},
+		{
+			name:       "metric not found",
+			method:     http.MethodGet,
+			metricName: metricName3,
+			metricType: string(internal.GaugeName),
+			want: want{
+				code: http.StatusNotFound,
+			},
+		},
+		{
+			name:       "wrong metric type",
+			method:     http.MethodGet,
+			metricName: metricName1,
+			metricType: "unexpected",
+			want: want{
+				code: http.StatusBadRequest,
+			},
+		},
+		{
+			name:       "wrong method",
+			method:     http.MethodPost,
+			metricName: metricName1,
+			metricType: string(internal.GaugeName),
+			want: want{
+				code: http.StatusMethodNotAllowed,
+			},
+		},
+	}
+
+	for _, tt := range metricStateTests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := resty.New().R()
+			req.Method = tt.method
+			req.URL = fmt.Sprintf("%s/value/%s/%s", srv.URL, tt.metricType, tt.metricName)
+
+			resp, err := req.Send()
+			assert.NoError(t, err, "error making HTTP request")
+
+			assert.Equal(t, tt.want.code, resp.StatusCode(), "Response code didn't match expected")
+			if tt.want.responseBody != "" {
+				assert.Equal(t, tt.want.responseBody, string(resp.Body()))
 			}
 		})
 	}

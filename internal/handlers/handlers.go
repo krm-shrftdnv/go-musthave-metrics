@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	"github.com/go-chi/chi/v5"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
@@ -19,15 +19,9 @@ func (h *UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	path := r.URL.Path
-	pathParts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(pathParts) != 4 {
-		http.Error(w, "Wrong path", http.StatusNotFound)
-		return
-	}
-	metricType := pathParts[1]
-	key := pathParts[2]
-	value := pathParts[3]
+	metricType := chi.URLParam(r, "metricType")
+	key := chi.URLParam(r, "metricName")
+	value := chi.URLParam(r, "metricValue")
 	switch internal.MetricTypeName(metricType) {
 	case internal.GaugeName:
 		value, err := strconv.ParseFloat(value, 64)
@@ -54,21 +48,68 @@ func (h *UpdateMetricHandler) addGauge(key string, value internal.Gauge) {
 }
 
 func (h *UpdateMetricHandler) addCounter(key string, value internal.Counter) {
-	newValue := h.CounterStorage.Get(key) + value
-	h.CounterStorage.Set(key, newValue)
-}
-
-type StorageStateHandler[T storage.Element] struct {
-	Storage *storage.MemStorage[T]
-}
-
-func (h *StorageStateHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	storageJSON, err := json.Marshal(h.Storage.GetAll())
+	oldValue, err := h.CounterStorage.Get(key)
 	if err != nil {
-		w.Write([]byte(err.Error()))
+		h.CounterStorage.Set(key, value)
+	} else {
+		h.CounterStorage.Set(key, oldValue+value)
+	}
+}
+
+type StorageStateHandler struct {
+	GaugeStorage   *storage.MemStorage[internal.Gauge]
+	CounterStorage *storage.MemStorage[internal.Counter]
+}
+
+func (h *StorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(storageJSON)
+	sb := strings.Builder{}
+	sb.WriteString(h.CounterStorage.String())
+	sb.WriteString("\n")
+	sb.WriteString(h.GaugeStorage.String())
+	_, err := w.Write([]byte(sb.String()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+type MetricStateHandler struct {
+	GaugeStorage   *storage.MemStorage[internal.Gauge]
+	CounterStorage *storage.MemStorage[internal.Counter]
+}
+
+func (h *MetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	metricType := chi.URLParam(r, "metricType")
+	key := chi.URLParam(r, "metricName")
+	var value string
+	switch internal.MetricTypeName(metricType) {
+	case internal.GaugeName:
+		element, err := h.GaugeStorage.Get(key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		value = element.String()
+	case internal.CounterName:
+		element, err := h.CounterStorage.Get(key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		value = element.String()
+	default:
+		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
+		return
+	}
+	_, err := w.Write([]byte(value))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

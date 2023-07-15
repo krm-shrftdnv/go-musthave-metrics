@@ -24,28 +24,39 @@ var emptyStorage = MemStorage[internal.Gauge]{}
 
 func TestMemStorage_Get(t *testing.T) {
 	type testCase[T Element] struct {
-		name string
-		ms   *MemStorage[T]
-		key  string
-		want T
+		name    string
+		ms      *MemStorage[T]
+		key     string
+		want    T
+		wantErr bool
 	}
 	tests := []testCase[internal.Gauge]{
 		{
-			name: "success",
-			ms:   &testStorage,
-			key:  "Alloc",
-			want: internal.Gauge(1.1),
+			name:    "success",
+			ms:      &testStorage,
+			key:     "Alloc",
+			want:    internal.Gauge(1.1),
+			wantErr: false,
 		},
 		{
-			name: "element not found",
-			ms:   &testStorage,
-			key:  "BuckHashSys1",
-			want: internal.Gauge(0),
+			name:    "element not found",
+			ms:      &testStorage,
+			key:     "BuckHashSys1",
+			want:    internal.Gauge(0),
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.ms.Get(tt.key), "Get() = %v, want %v", tt.want, tt.ms.Get(tt.key))
+			element, err := tt.ms.Get(tt.key)
+			if err != nil {
+				if !tt.wantErr {
+					t.Errorf("Get() error = %v", err)
+				} else {
+					assert.Equal(t, tt.want, element, "Get() = %v, want %v", tt.want, element)
+				}
+			}
+			assert.Equal(t, tt.want, element, "Get() = %v, want %v", tt.want, element)
 		})
 	}
 }
@@ -140,7 +151,11 @@ func TestMemStorage_Set(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.ms.Set(tt.args.key, tt.args.value)
-			assert.Equal(t, tt.want.value, tt.ms.Get(tt.want.key), "Set() = %v, want %v", tt.want, tt.ms.Get(tt.want.key))
+			element, err := tt.ms.Get(tt.args.key)
+			if err != nil {
+				t.Errorf("Get() error = %v", err)
+			}
+			assert.Equal(t, tt.want.value, element, "Set() = %v, want %v", tt.want, element)
 		})
 	}
 }
