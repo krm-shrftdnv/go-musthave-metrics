@@ -66,7 +66,7 @@ func poll() {
 	for _, metricName := range metricNames {
 		updateMetric(metricName)
 	}
-	time.Sleep(time.Duration(pollInterval) * time.Second)
+	time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 }
 
 func updateMetric(name string) {
@@ -147,16 +147,16 @@ func sendMetrics() {
 		}
 		_, err := client.R().
 			SetHeader("Content-Type", "text/plain").
-			Post(fmt.Sprintf("http://%s/update/%s/%s/%v", serverAddress, metric.Value.GetTypeName(), metric.Name, metric.Value))
+			Post(fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.ServerAddress, metric.Value.GetTypeName(), metric.Name, metric.Value))
 		if err != nil {
 			log.Fatalln(err)
 		}
 	}
 	_, err := client.R().
 		SetHeader("Content-Type", "text/plain").
-		Post(fmt.Sprintf("http://%s/update/%s/pollCount/%v", serverAddress, pollCount.Value.GetTypeName(), pollCount.Value))
+		Post(fmt.Sprintf("http://%s/update/%s/pollCount/%v", cfg.ServerAddress, pollCount.Value.GetTypeName(), pollCount.Value))
 	if err != nil {
 		log.Fatalln(err)
 	}
-	time.Sleep(time.Duration(reportInterval) * time.Second)
+	time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
 }

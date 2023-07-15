@@ -13,8 +13,8 @@ var counterStorage = storage.MemStorage[internal.Counter]{}
 var gaugeStorage = storage.MemStorage[internal.Gauge]{}
 
 func run(handler http.Handler) error {
-	fmt.Println("Running server on ", flagRunAddr)
-	return http.ListenAndServe(flagRunAddr, handler)
+	fmt.Println("Running server on ", cfg.ServerAddress)
+	return http.ListenAndServe(cfg.ServerAddress, handler)
 }
 
 func main() {
