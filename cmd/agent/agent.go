@@ -66,7 +66,7 @@ func poll() {
 	for _, metricName := range metricNames {
 		updateMetric(metricName)
 	}
-	time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
+	time.Sleep(cfg.PollInterval * time.Second)
 }
 
 func updateMetric(name string) {
@@ -158,5 +158,5 @@ func sendMetrics() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
+	time.Sleep(cfg.ReportInterval * time.Second)
 }

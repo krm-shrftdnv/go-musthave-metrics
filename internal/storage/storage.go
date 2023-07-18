@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"errors"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"strings"
 )
@@ -24,12 +23,9 @@ func (ms *MemStorage[T]) Set(key string, value T) {
 	ms.storage[key] = value
 }
 
-func (ms *MemStorage[T]) Get(key string) (T, error) {
+func (ms *MemStorage[T]) Get(key string) (T, bool) {
 	value, ok := ms.storage[key]
-	if !ok {
-		return value, errors.New("element not found")
-	}
-	return value, nil
+	return value, ok
 }
 
 func (ms *MemStorage[T]) GetAll() map[string]T {

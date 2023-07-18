@@ -48,10 +48,10 @@ func TestMemStorage_Get(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			element, err := tt.ms.Get(tt.key)
-			if err != nil {
+			element, ok := tt.ms.Get(tt.key)
+			if !ok {
 				if !tt.wantErr {
-					t.Errorf("Get() error = %v", err)
+					t.Error("Get() = element not found")
 				} else {
 					assert.Equal(t, tt.want, element, "Get() = %v, want %v", tt.want, element)
 				}
@@ -151,9 +151,9 @@ func TestMemStorage_Set(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.ms.Set(tt.args.key, tt.args.value)
-			element, err := tt.ms.Get(tt.args.key)
-			if err != nil {
-				t.Errorf("Get() error = %v", err)
+			element, ok := tt.ms.Get(tt.args.key)
+			if !ok {
+				t.Error("Get() = element not found")
 			}
 			assert.Equal(t, tt.want.value, element, "Set() = %v, want %v", tt.want, element)
 		})

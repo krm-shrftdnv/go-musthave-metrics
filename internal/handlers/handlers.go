@@ -48,8 +48,8 @@ func (h *UpdateMetricHandler) addGauge(key string, value internal.Gauge) {
 }
 
 func (h *UpdateMetricHandler) addCounter(key string, value internal.Counter) {
-	oldValue, err := h.CounterStorage.Get(key)
-	if err != nil {
+	oldValue, ok := h.CounterStorage.Get(key)
+	if !ok {
 		h.CounterStorage.Set(key, value)
 	} else {
 		h.CounterStorage.Set(key, oldValue+value)
@@ -91,16 +91,16 @@ func (h *MetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var value string
 	switch internal.MetricTypeName(metricType) {
 	case internal.GaugeName:
-		element, err := h.GaugeStorage.Get(key)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		element, ok := h.GaugeStorage.Get(key)
+		if !ok {
+			http.Error(w, "element not found", http.StatusNotFound)
 			return
 		}
 		value = element.String()
 	case internal.CounterName:
-		element, err := h.CounterStorage.Get(key)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		element, ok := h.CounterStorage.Get(key)
+		if !ok {
+			http.Error(w, "element not found", http.StatusNotFound)
 			return
 		}
 		value = element.String()
