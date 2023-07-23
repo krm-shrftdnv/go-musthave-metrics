@@ -11,6 +11,7 @@ var cfg internal.Config
 
 func parseFlags() {
 	flag.StringVar(&cfg.ServerAddress, "a", ":8080", "address and port to run server")
+	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 
 	err := env.Parse(&cfg)
