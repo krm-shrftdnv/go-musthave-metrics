@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"log"
 	"math/rand"
 	"runtime"
@@ -146,15 +147,25 @@ func sendMetrics() {
 			_ = 1
 		}
 		_, err := client.R().
-			SetHeader("Content-Type", "text/plain").
-			Post(fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.ServerAddress, metric.Value.GetTypeName(), metric.Name, metric.Value))
+			SetBody(serializer.Metrics{
+				ID:    metricName,
+				MType: string(metric.Value.GetTypeName()),
+				Value: &metric.Value,
+			}).
+			SetHeader("Content-Type", "application/json").
+			Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
 		if err != nil {
 			log.Fatalln(err)
 		}
 	}
 	_, err := client.R().
-		SetHeader("Content-Type", "text/plain").
-		Post(fmt.Sprintf("http://%s/update/%s/pollCount/%v", cfg.ServerAddress, pollCount.Value.GetTypeName(), pollCount.Value))
+		SetBody(serializer.Metrics{
+			ID:    pollCount.Name,
+			MType: string(pollCount.Value.GetTypeName()),
+			Delta: &pollCount.Value,
+		}).
+		SetHeader("Content-Type", "application/json").
+		Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -32,11 +32,23 @@ func main() {
 		GaugeStorage:   &gaugeStorage,
 		CounterStorage: &counterStorage,
 	}
+	jsonUpdateMetricHandler := handlers.JSONUpdateMetricHandler{
+		UpdateMetricHandler: updateMetricHandler,
+	}
+	jsonMetricStateHandler := handlers.JSONMetricStateHandler{
+		MetricStateHandler: metricStateHandler,
+	}
+	jsonStorageStateHandler := handlers.JSONStorageStateHandler{
+		StorageStateHandler: storageStateHandler,
+	}
 
 	r := chi.NewRouter()
 
 	r.Handle("/update/{metricType}/{metricName}/{metricValue}", logger.RequestWithLogging(&updateMetricHandler))
+	r.Handle("/update", logger.RequestWithLogging(&jsonUpdateMetricHandler))
 	r.Handle("/value/{metricType}/{metricName}", logger.RequestWithLogging(&metricStateHandler))
+	r.Handle("/value", logger.RequestWithLogging(&jsonMetricStateHandler))
+	r.Handle("/json", logger.RequestWithLogging(&jsonStorageStateHandler))
 	r.Handle("/", logger.RequestWithLogging(&storageStateHandler))
 
 	err := run(r)
