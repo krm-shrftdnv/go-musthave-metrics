@@ -44,7 +44,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RedirectSlashes)
+	r.Use(middleware.StripSlashes)
 
 	r.Route("/update", func(r chi.Router) {
 		r.Handle("/", logger.RequestWithLogging(&jsonUpdateMetricHandler))
