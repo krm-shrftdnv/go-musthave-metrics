@@ -1,6 +1,9 @@
 package logger
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -21,15 +24,15 @@ type (
 	}
 )
 
-func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	size, err := r.ResponseWriter.Write(b)
-	r.responseData.size += size
+func (w *loggingResponseWriter) Write(b []byte) (int, error) {
+	size, err := w.ResponseWriter.Write(b)
+	w.responseData.size += size
 	return size, err
 }
 
-func (r *loggingResponseWriter) WriteHeader(statusCode int) {
-	r.ResponseWriter.WriteHeader(statusCode)
-	r.responseData.status = statusCode
+func (w *loggingResponseWriter) WriteHeader(statusCode int) {
+	w.ResponseWriter.WriteHeader(statusCode)
+	w.responseData.status = statusCode
 }
 
 func Initialize(level string) error {
@@ -56,6 +59,16 @@ func RequestWithLogging(h http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		uri := r.RequestURI
 		method := r.Method
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		err = r.Body.Close()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		responseData := &responseData{
 			status: http.StatusOK,
 			size:   0,
@@ -65,6 +78,7 @@ func RequestWithLogging(h http.Handler) http.Handler {
 			responseData:   responseData,
 		}
 		start := time.Now()
+		r.Body = io.NopCloser(bytes.NewReader(body))
 		h.ServeHTTP(&lw, r)
 		duration := time.Since(start)
 
@@ -72,6 +86,7 @@ func RequestWithLogging(h http.Handler) http.Handler {
 			"Request",
 			"uri", uri,
 			"method", method,
+			"body", fmt.Sprintf("%s", body),
 			"status", lw.responseData.status,
 			"duration", duration,
 			"size", lw.responseData.size,
