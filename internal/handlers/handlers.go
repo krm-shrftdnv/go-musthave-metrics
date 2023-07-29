@@ -140,8 +140,20 @@ func (h *JSONUpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	switch internal.MetricTypeName(metric.MType) {
 	case internal.GaugeName:
 		h.addGauge(metric.ID, *metric.Value)
+		value, ok := h.GaugeStorage.Get(metric.ID)
+		if !ok {
+			http.Error(w, "element not found", http.StatusNotFound)
+			return
+		}
+		metric.Value = value
 	case internal.CounterName:
 		h.addCounter(metric.ID, *metric.Delta)
+		delta, ok := h.CounterStorage.Get(metric.ID)
+		if !ok {
+			http.Error(w, "element not found", http.StatusNotFound)
+			return
+		}
+		metric.Delta = delta
 	default:
 		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
 		return
