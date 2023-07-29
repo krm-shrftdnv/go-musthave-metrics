@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/handlers"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
@@ -43,13 +44,20 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+	r.Use(middleware.RedirectSlashes)
 
-	r.Handle("/update/{metricType}/{metricName}/{metricValue}", logger.RequestWithLogging(&updateMetricHandler))
-	r.Handle("/update", logger.RequestWithLogging(&jsonUpdateMetricHandler))
-	r.Handle("/value/{metricType}/{metricName}", logger.RequestWithLogging(&metricStateHandler))
-	r.Handle("/value", logger.RequestWithLogging(&jsonMetricStateHandler))
-	r.Handle("/json", logger.RequestWithLogging(&jsonStorageStateHandler))
-	r.Handle("/", logger.RequestWithLogging(&storageStateHandler))
+	r.Route("/update", func(r chi.Router) {
+		r.Handle("/", logger.RequestWithLogging(&jsonUpdateMetricHandler))
+		r.Handle("/{metricType}/{metricName}/{metricValue}", logger.RequestWithLogging(&updateMetricHandler))
+	})
+	r.Route("/value", func(r chi.Router) {
+		r.Handle("/", logger.RequestWithLogging(&jsonMetricStateHandler))
+		r.Handle("/{metricType}/{metricName}", logger.RequestWithLogging(&metricStateHandler))
+	})
+	r.Route("/", func(r chi.Router) {
+		r.Handle("/json", logger.RequestWithLogging(&jsonStorageStateHandler))
+		r.Handle("/", logger.RequestWithLogging(&storageStateHandler))
+	})
 
 	err := run(r)
 	if err != nil {
