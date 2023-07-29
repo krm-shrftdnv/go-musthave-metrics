@@ -2,7 +2,6 @@ package logger
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -86,7 +85,7 @@ func RequestWithLogging(h http.Handler) http.Handler {
 			"Request",
 			"uri", uri,
 			"method", method,
-			"body", fmt.Sprintf("%s", body),
+			"body", string(body),
 			"status", lw.responseData.status,
 			"duration", duration,
 			"size", lw.responseData.size,
