@@ -35,8 +35,8 @@ func main() {
 
 	r := chi.NewRouter()
 
-	r.Handle("/update/{metricType}/{metricName}/{metricValue}", logger.RequestWithLogging(&updateMetricHandler))
-	r.Handle("/value/{metricType}/{metricName}", logger.RequestWithLogging(&metricStateHandler))
+	r.Handle("/update", logger.RequestWithLogging(&updateMetricHandler))
+	r.Handle("/value", logger.RequestWithLogging(&metricStateHandler))
 	r.Handle("/", logger.RequestWithLogging(&storageStateHandler))
 
 	err := run(r)

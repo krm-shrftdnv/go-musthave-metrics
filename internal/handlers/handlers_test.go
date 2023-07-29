@@ -1,16 +1,18 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 )
 
@@ -43,8 +45,8 @@ func TestStorageStateHandler_ServeHTTP(t *testing.T) {
 			method: http.MethodGet,
 			want: want{
 				code:         http.StatusOK,
-				responseBody: "\n",
-				contentType:  "text/plain",
+				responseBody: "[]",
+				contentType:  "application/json",
 			},
 		},
 		{
@@ -85,9 +87,22 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 	var counterStorage storage.MemStorage[internal.Counter]
 	gaugeStorage.Init()
 	counterStorage.Init()
+	metricValue1 := internal.Gauge(123.45)
+	metricValue2 := internal.Counter(123)
+	metric1 := serializer.Metrics{
+		ID:    "metric1",
+		MType: string(internal.GaugeName),
+		Value: &metricValue1,
+	}
+	metric2 := serializer.Metrics{
+		ID:    "metric2",
+		MType: string(internal.CounterName),
+		Delta: &metricValue2,
+	}
 
 	type want struct {
-		code int
+		code         int
+		responseBody *serializer.Metrics
 	}
 	type updateMetricTestCase struct {
 		name           string
@@ -104,7 +119,7 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		CounterStorage: &counterStorage,
 	}
 	r := chi.NewRouter()
-	r.Handle("/update/{metricType}/{metricName}/{metricValue}", &updateMetricHandler)
+	r.Handle("/update", &updateMetricHandler)
 	updateMetricSrv := httptest.NewServer(r)
 	defer updateMetricSrv.Close()
 
@@ -112,13 +127,14 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "success gauge update",
 			want: want{
-				code: http.StatusOK,
+				code:         http.StatusOK,
+				responseBody: &metric1,
 			},
 			method:         http.MethodPost,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: string(internal.GaugeName),
-			metricName:     "metric1",
-			metricValue:    strconv.FormatFloat(123.45, 'f', -1, 64),
+			metricName:     metric1.ID,
+			metricValue:    strconv.FormatFloat(float64(*metric1.Value), 'f', -1, 64),
 		},
 		{
 			name: "gauge wrong method",
@@ -126,10 +142,10 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 				code: http.StatusMethodNotAllowed,
 			},
 			method:         http.MethodGet,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: string(internal.GaugeName),
-			metricName:     "metric1",
-			metricValue:    strconv.FormatFloat(123.45, 'f', -1, 64),
+			metricName:     metric1.ID,
+			metricValue:    strconv.FormatFloat(float64(*metric1.Value), 'f', -1, 64),
 		},
 		{
 			name: "gauge wrong path",
@@ -145,9 +161,9 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 				code: http.StatusBadRequest,
 			},
 			method:         http.MethodPost,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: string(internal.GaugeName),
-			metricName:     "metric1",
+			metricName:     metric1.ID,
 			metricValue:    "value1",
 		},
 		{
@@ -156,21 +172,22 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 				code: http.StatusBadRequest,
 			},
 			method:         http.MethodPost,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: "unexpected",
-			metricName:     "metric1",
-			metricValue:    strconv.FormatFloat(123.45, 'f', -1, 64),
+			metricName:     metric1.ID,
+			metricValue:    strconv.FormatFloat(float64(*metric1.Value), 'f', -1, 64),
 		},
 		{
 			name: "counter success update",
 			want: want{
-				code: http.StatusOK,
+				code:         http.StatusOK,
+				responseBody: &metric2,
 			},
 			method:         http.MethodPost,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: string(internal.CounterName),
-			metricName:     "metric2",
-			metricValue:    strconv.FormatInt(123, 10),
+			metricName:     metric2.ID,
+			metricValue:    strconv.FormatInt(int64(*metric2.Delta), 10),
 		},
 		{
 			name: "counter wrong value",
@@ -178,27 +195,64 @@ func TestUpdateMetricHandler_ServeHTTP(t *testing.T) {
 				code: http.StatusBadRequest,
 			},
 			method:         http.MethodPost,
-			request:        "/update/%s/%s/%s",
+			request:        "/update",
 			metricTypeName: string(internal.CounterName),
-			metricName:     "metric2",
+			metricName:     metric2.ID,
 			metricValue:    "value2",
 		},
 	}
 	for _, tt := range updateMetricTests {
 		t.Run(tt.name, func(t *testing.T) {
-			var target string
-			if strings.Count(tt.request, "%s") > 0 {
-				target = fmt.Sprintf(tt.request, tt.metricTypeName, tt.metricName, tt.metricValue)
-			} else {
-				target = tt.request
-			}
+			var metric serializer.Metrics
 			req := resty.New().R()
+
+			value, err := strconv.ParseFloat(tt.metricValue, 64)
+			if err != nil {
+				metricStringValue := struct {
+					serializer.Metrics
+					Value string `json:"value"`
+				}{
+					Metrics: serializer.Metrics{
+						ID:    tt.metricName,
+						MType: tt.metricTypeName,
+					},
+					Value: tt.metricValue,
+				}
+				req.SetBody(metricStringValue)
+			} else {
+				switch tt.metricTypeName {
+				case string(internal.GaugeName):
+					gaugeValue := internal.Gauge(value)
+					metric = serializer.Metrics{
+						ID:    tt.metricName,
+						MType: tt.metricTypeName,
+						Value: &gaugeValue,
+					}
+				case string(internal.CounterName):
+					counterValue := internal.Counter(value)
+					metric = serializer.Metrics{
+						ID:    tt.metricName,
+						MType: tt.metricTypeName,
+						Delta: &counterValue,
+					}
+				}
+				req.SetBody(metric)
+			}
 			req.Method = tt.method
-			req.URL = fmt.Sprintf("%s%s", updateMetricSrv.URL, target)
+			req.SetHeader("Content-Type", "application/json")
+			req.URL = fmt.Sprintf("%s%s", updateMetricSrv.URL, tt.request)
 
 			resp, err := req.Send()
-			assert.NoError(t, err, "error making HTTP request")
 			assert.Equal(t, tt.want.code, resp.StatusCode(), "Response code didn't match expected")
+			if tt.want.code == http.StatusOK {
+				assert.NoError(t, err, "error making HTTP request")
+				var metric serializer.Metrics
+				assert.NoError(t, err, "error reading response body")
+				err = json.Unmarshal(resp.Body(), &metric)
+				assert.NoError(t, err, "error unmarshalling response body")
+				ok := reflect.DeepEqual(tt.want.responseBody, &metric)
+				assert.True(t, ok, "response body didn't match expected")
+			}
 		})
 	}
 }
@@ -216,19 +270,29 @@ func TestMetricStateHandler_ServeHTTP(t *testing.T) {
 	metricName3 := "metric3"
 	gaugeStorage.Set(metricName1, metricValue1)
 	counterStorage.Set(metricName2, metricValue2)
+	metric1 := serializer.Metrics{
+		ID:    metricName1,
+		MType: string(internal.GaugeName),
+		Value: &metricValue1,
+	}
+	metric2 := serializer.Metrics{
+		ID:    metricName2,
+		MType: string(internal.CounterName),
+		Delta: &metricValue2,
+	}
 
 	metricStateHandler := MetricStateHandler{
 		GaugeStorage:   &gaugeStorage,
 		CounterStorage: &counterStorage,
 	}
 	r := chi.NewRouter()
-	r.Handle("/value/{metricType}/{metricName}", &metricStateHandler)
+	r.Handle("/value", &metricStateHandler)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
 	type want struct {
 		code         int
-		responseBody string
+		responseBody *serializer.Metrics
 		contentType  string
 	}
 	type metricStateTestCase struct {
@@ -241,29 +305,29 @@ func TestMetricStateHandler_ServeHTTP(t *testing.T) {
 	metricStateTests := []metricStateTestCase{
 		{
 			name:       "success gauge",
-			method:     http.MethodGet,
+			method:     http.MethodPost,
 			metricName: metricName1,
 			metricType: string(internal.GaugeName),
 			want: want{
 				code:         http.StatusOK,
-				responseBody: metricValue1.String(),
+				responseBody: &metric1,
 				contentType:  "text/plain",
 			},
 		},
 		{
 			name:       "success counter",
-			method:     http.MethodGet,
+			method:     http.MethodPost,
 			metricName: metricName2,
 			metricType: string(internal.CounterName),
 			want: want{
 				code:         http.StatusOK,
-				responseBody: metricValue2.String(),
+				responseBody: &metric2,
 				contentType:  "text/plain",
 			},
 		},
 		{
 			name:       "metric not found",
-			method:     http.MethodGet,
+			method:     http.MethodPost,
 			metricName: metricName3,
 			metricType: string(internal.GaugeName),
 			want: want{
@@ -272,7 +336,7 @@ func TestMetricStateHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name:       "wrong metric type",
-			method:     http.MethodGet,
+			method:     http.MethodPost,
 			metricName: metricName1,
 			metricType: "unexpected",
 			want: want{
@@ -281,7 +345,7 @@ func TestMetricStateHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name:       "wrong method",
-			method:     http.MethodPost,
+			method:     http.MethodGet,
 			metricName: metricName1,
 			metricType: string(internal.GaugeName),
 			want: want{
@@ -294,14 +358,23 @@ func TestMetricStateHandler_ServeHTTP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := resty.New().R()
 			req.Method = tt.method
-			req.URL = fmt.Sprintf("%s/value/%s/%s", srv.URL, tt.metricType, tt.metricName)
+			req.URL = fmt.Sprintf("%s/value", srv.URL)
+			req.SetBody(serializer.Metrics{
+				ID:    tt.metricName,
+				MType: tt.metricType,
+			})
 
 			resp, err := req.Send()
 			assert.NoError(t, err, "error making HTTP request")
 
 			assert.Equal(t, tt.want.code, resp.StatusCode(), "Response code didn't match expected")
-			if tt.want.responseBody != "" {
-				assert.Equal(t, tt.want.responseBody, string(resp.Body()))
+			if tt.want.responseBody != nil {
+				var metric serializer.Metrics
+				assert.NoError(t, err, "error reading response body")
+				err = json.Unmarshal(resp.Body(), &metric)
+				assert.NoError(t, err, "error unmarshalling response body")
+				ok := reflect.DeepEqual(tt.want.responseBody, &metric)
+				assert.True(t, ok, "response body didn't match expected")
 			}
 		})
 	}
