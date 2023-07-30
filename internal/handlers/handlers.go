@@ -8,6 +8,7 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -182,17 +183,30 @@ func (h *JSONStorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	metrics := []serializer.Metrics{}
-	for id, c := range h.CounterStorage.GetAll() {
+	counterStorage := h.CounterStorage.GetAll()
+	keys := make([]string, 0, len(counterStorage))
+	for k := range counterStorage {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		c, _ := h.CounterStorage.Get(key)
 		metrics = append(metrics, serializer.Metrics{
-			ID:    id,
+			ID:    key,
 			MType: string(c.GetTypeName()),
 			Delta: c,
 		})
 	}
 	gaugeStorage := h.GaugeStorage.GetAll()
-	for id, g := range gaugeStorage {
+	keys = make([]string, 0, len(gaugeStorage))
+	for k := range gaugeStorage {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		g, _ := h.GaugeStorage.Get(key)
 		metrics = append(metrics, serializer.Metrics{
-			ID:    id,
+			ID:    key,
 			MType: string(g.GetTypeName()),
 			Value: g,
 		})
