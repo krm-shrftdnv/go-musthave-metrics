@@ -55,19 +55,23 @@ func main() {
 			Name: metricName,
 		}
 	}
-	for {
+	go func() {
 		poll()
+	}()
+	go func() {
 		sendMetrics()
-	}
+	}()
+	select {}
 }
 
 func poll() {
-	runtime.ReadMemStats(&m)
-	pollCount.Value++
-	for _, metricName := range metricNames {
-		updateMetric(metricName)
+	for range time.Tick(time.Duration(cfg.PollInterval) * time.Second) {
+		runtime.ReadMemStats(&m)
+		pollCount.Value++
+		for _, metricName := range metricNames {
+			updateMetric(metricName)
+		}
 	}
-	time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 }
 
 func updateMetric(name string) {
@@ -137,20 +141,33 @@ func updateMetric(name string) {
 }
 
 func sendMetrics() {
-	client := resty.New()
-	for _, metricName := range metricNames {
-		metric, ok := gaugeMetrics[metricName]
-		if !ok {
-			return
-		}
-		if metricName == "RandomValue" {
-			_ = 1
+	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
+		client := resty.New()
+		for _, metricName := range metricNames {
+			metric, ok := gaugeMetrics[metricName]
+			if !ok {
+				return
+			}
+			if metricName == "RandomValue" {
+				_ = 1
+			}
+			_, err := client.R().
+				SetBody(serializer.Metrics{
+					ID:    metricName,
+					MType: string(metric.Value.GetTypeName()),
+					Value: &metric.Value,
+				}).
+				SetHeader("Content-Type", "application/json").
+				Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
+			if err != nil {
+				log.Fatalln(err)
+			}
 		}
 		_, err := client.R().
 			SetBody(serializer.Metrics{
-				ID:    metricName,
-				MType: string(metric.Value.GetTypeName()),
-				Value: &metric.Value,
+				ID:    pollCount.Name,
+				MType: string(pollCount.Value.GetTypeName()),
+				Delta: &pollCount.Value,
 			}).
 			SetHeader("Content-Type", "application/json").
 			Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
@@ -158,16 +175,4 @@ func sendMetrics() {
 			log.Fatalln(err)
 		}
 	}
-	_, err := client.R().
-		SetBody(serializer.Metrics{
-			ID:    pollCount.Name,
-			MType: string(pollCount.Value.GetTypeName()),
-			Delta: &pollCount.Value,
-		}).
-		SetHeader("Content-Type", "application/json").
-		Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
 }
