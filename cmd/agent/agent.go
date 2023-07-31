@@ -47,6 +47,7 @@ var pollCount = internal.Metric[internal.Counter]{
 	Value: 0,
 }
 var gaugeMetrics = map[string]*internal.Metric[internal.Gauge]{}
+var client *resty.Client
 
 func main() {
 	parseFlags()
@@ -55,6 +56,7 @@ func main() {
 			Name: metricName,
 		}
 	}
+	client = resty.New()
 	go func() {
 		poll()
 	}()
@@ -142,7 +144,6 @@ func updateMetric(name string) {
 
 func sendMetrics() {
 	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
-		client := resty.New()
 		for _, metricName := range metricNames {
 			metric, ok := gaugeMetrics[metricName]
 			if !ok {
@@ -159,9 +160,10 @@ func sendMetrics() {
 					Value: &metric.Value,
 				}).
 				SetHeader("Content-Type", "application/json").
-				Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
+				Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
 			if err != nil {
-				log.Fatalf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
+				log.Printf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
+				continue
 			}
 		}
 		_, err := client.R().
@@ -171,9 +173,10 @@ func sendMetrics() {
 				Delta: &pollCount.Value,
 			}).
 			SetHeader("Content-Type", "application/json").
-			Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
+			Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
 		if err != nil {
-			log.Fatalf("error sending counter metric %s=%v: %v\n", pollCount.Name, pollCount.Value, err)
+			log.Printf("error sending counter metric %s=%v: %v\n", pollCount.Name, pollCount.Value, err)
+			continue
 		}
 	}
 }
