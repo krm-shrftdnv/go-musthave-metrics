@@ -151,7 +151,8 @@ func sendMetrics() {
 			if metricName == "RandomValue" {
 				_ = 1
 			}
-			_, err := client.R().
+			req := client.R()
+			_, err := req.
 				SetBody(serializer.Metrics{
 					ID:    metricName,
 					MType: string(metric.Value.GetTypeName()),
@@ -160,7 +161,7 @@ func sendMetrics() {
 				SetHeader("Content-Type", "application/json").
 				Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
 			if err != nil {
-				log.Fatalln(err)
+				log.Fatalf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
 			}
 		}
 		_, err := client.R().
@@ -172,7 +173,7 @@ func sendMetrics() {
 			SetHeader("Content-Type", "application/json").
 			Post(fmt.Sprintf("http://%s/update", cfg.ServerAddress))
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalf("error sending counter metric %s=%v: %v\n", pollCount.Name, pollCount.Value, err)
 		}
 	}
 }
