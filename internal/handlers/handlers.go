@@ -74,6 +74,7 @@ func (h *StorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	sb.WriteString(h.CounterStorage.String())
 	sb.WriteString("\n")
 	sb.WriteString(h.GaugeStorage.String())
+	w.Header().Set("Content-Type", "text/html")
 	_, err := w.Write([]byte(sb.String()))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -112,6 +113,7 @@ func (h *MetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html")
 	_, err := w.Write([]byte(value))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

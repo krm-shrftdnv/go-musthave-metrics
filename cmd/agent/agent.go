@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"log"
 	"math/rand"
@@ -152,26 +154,39 @@ func sendMetrics() {
 			if metricName == "RandomValue" {
 				_ = 1
 			}
-			req := client.R()
-			_, err := req.
-				SetBody(serializer.Metrics{
-					ID:    metricName,
-					MType: string(metric.Value.GetTypeName()),
-					Value: &metric.Value,
-				}).
-				SetHeader("Content-Type", "application/json").
+			req := gzip.CompressedRequest{
+				Request: client.R(),
+			}
+			body, err := json.Marshal(serializer.Metrics{
+				ID:    metricName,
+				MType: string(metric.Value.GetTypeName()),
+				Value: &metric.Value,
+			})
+			if err != nil {
+				log.Printf("error marshalling metric %s - %v: %v\n", metricName, metric.Value, err)
+			}
+			_, err = req.
+				SetBody(body).
+				SetHeader("Content-Type", "application/json; charset=utf-8").
 				Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
 			if err != nil {
 				log.Printf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
 				continue
 			}
 		}
-		_, err := client.R().
-			SetBody(serializer.Metrics{
-				ID:    pollCount.Name,
-				MType: string(pollCount.Value.GetTypeName()),
-				Delta: &pollCount.Value,
-			}).
+		req := gzip.CompressedRequest{
+			Request: client.R(),
+		}
+		body, err := json.Marshal(serializer.Metrics{
+			ID:    pollCount.Name,
+			MType: string(pollCount.Value.GetTypeName()),
+			Delta: &pollCount.Value,
+		})
+		if err != nil {
+			log.Printf("error marshalling metric %s - %v: %v\n", pollCount.Name, pollCount.Value, err)
+		}
+		_, err = req.
+			SetBody(body).
 			SetHeader("Content-Type", "application/json").
 			Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
 		if err != nil {
