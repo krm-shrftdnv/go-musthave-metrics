@@ -95,12 +95,11 @@ func main() {
 			saveMetrics(cfg.StoreInterval)
 		}()
 	}
-	select {
-	case <-gracefulShutdown:
-		logger.Log.Infoln("Graceful shutdown")
-		err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
-		if err != nil {
-			logger.Log.Errorln(err)
-		}
+
+	<-gracefulShutdown
+	logger.Log.Infoln("Graceful shutdown")
+	err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
+	if err != nil {
+		logger.Log.Errorln(err)
 	}
 }
