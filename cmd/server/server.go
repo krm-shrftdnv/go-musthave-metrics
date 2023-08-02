@@ -9,6 +9,9 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +34,9 @@ func saveMetrics(storeInterval int64) {
 }
 
 func main() {
+	gracefulShutdown := make(chan os.Signal, 1)
+	signal.Notify(gracefulShutdown, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
 	Init()
 	updateMetricHandler := handlers.UpdateMetricHandler{
 		GaugeStorage:   &gaugeStorage,
@@ -89,5 +95,12 @@ func main() {
 			saveMetrics(cfg.StoreInterval)
 		}()
 	}
-	select {}
+	select {
+	case <-gracefulShutdown:
+		logger.Log.Infoln("Graceful shutdown")
+		err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
+		if err != nil {
+			logger.Log.Errorln(err)
+		}
+	}
 }
