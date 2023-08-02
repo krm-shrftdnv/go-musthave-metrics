@@ -5,17 +5,18 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 )
 
 type UpdateMetricHandler struct {
-	GaugeStorage   *storage.MemStorage[internal.Gauge]
-	CounterStorage *storage.MemStorage[internal.Counter]
+	GaugeStorage    *storage.MemStorage[internal.Gauge]
+	CounterStorage  *storage.MemStorage[internal.Counter]
+	FileStoragePath string
 }
 
 func (h *UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,19 +32,22 @@ func (h *UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			http.Error(w, "Value should be float", http.StatusBadRequest)
-			return
 		}
 		h.addGauge(key, internal.Gauge(value))
 	case internal.CounterName:
 		value, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			http.Error(w, "Value should be int", http.StatusBadRequest)
-			return
 		}
 		h.addCounter(key, internal.Counter(value))
 	default:
 		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
-		return
+	}
+	if h.FileStoragePath != "" {
+		err := storage.SingletonOperator.SaveAllMetrics(h.FileStoragePath)
+		if err != nil {
+			logger.Log.Errorln(err)
+		}
 	}
 }
 
@@ -184,35 +188,7 @@ func (h *JSONStorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	metrics := []serializer.Metrics{}
-	counterStorage := h.CounterStorage.GetAll()
-	keys := make([]string, 0, len(counterStorage))
-	for k := range counterStorage {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		c, _ := h.CounterStorage.Get(key)
-		metrics = append(metrics, serializer.Metrics{
-			ID:    key,
-			MType: string(c.GetTypeName()),
-			Delta: c,
-		})
-	}
-	gaugeStorage := h.GaugeStorage.GetAll()
-	keys = make([]string, 0, len(gaugeStorage))
-	for k := range gaugeStorage {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		g, _ := h.GaugeStorage.Get(key)
-		metrics = append(metrics, serializer.Metrics{
-			ID:    key,
-			MType: string(g.GetTypeName()),
-			Value: g,
-		})
-	}
+	metrics := storage.SingletonOperator.GetAllMetrics()
 	resp, err := json.Marshal(metrics)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

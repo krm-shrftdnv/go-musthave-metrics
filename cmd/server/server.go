@@ -9,6 +9,7 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
+	"time"
 )
 
 var counterStorage = storage.MemStorage[internal.Counter]{}
@@ -19,12 +20,24 @@ func run(handler http.Handler) error {
 	return http.ListenAndServe(cfg.ServerAddress, handler)
 }
 
+func saveMetrics(storeInterval int64) {
+	for range time.Tick(time.Duration(storeInterval) * time.Second) {
+		logger.Log.Infoln("Saving metrics to ", cfg.FileStoragePath)
+		err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
+		if err != nil {
+			logger.Log.Errorln(err)
+		}
+	}
+}
+
 func main() {
 	Init()
-
 	updateMetricHandler := handlers.UpdateMetricHandler{
 		GaugeStorage:   &gaugeStorage,
 		CounterStorage: &counterStorage,
+	}
+	if cfg.StoreInterval == 0 {
+		updateMetricHandler.FileStoragePath = cfg.FileStoragePath
 	}
 	storageStateHandler := handlers.StorageStateHandler{
 		GaugeStorage:   &gaugeStorage,
@@ -64,8 +77,17 @@ func main() {
 		r.Handle("/", &storageStateHandler)
 	})
 
-	err := run(r)
-	if err != nil {
-		panic(err)
+	go func() {
+		err := run(r)
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	if cfg.StoreInterval > 0 {
+		go func() {
+			saveMetrics(cfg.StoreInterval)
+		}()
 	}
+	select {}
 }

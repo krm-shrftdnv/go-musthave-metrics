@@ -6,6 +6,7 @@ require (
 	github.com/caarlos0/env/v6 v6.10.1
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-resty/resty/v2 v2.7.0
+	github.com/pkg/errors v0.8.1
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.24.0
 )
