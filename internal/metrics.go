@@ -37,7 +37,3 @@ func (c Counter) GetTypeName() MetricTypeName {
 func (c Counter) String() string {
 	return strconv.FormatInt(int64(c), 10)
 }
-
-func (m Metric[T]) String() string {
-	return m.Value.String()
-}

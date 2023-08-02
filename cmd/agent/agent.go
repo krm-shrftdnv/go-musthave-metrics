@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"log"
 	"math/rand"
 	"runtime"
@@ -46,6 +49,7 @@ var pollCount = internal.Metric[internal.Counter]{
 	Value: 0,
 }
 var gaugeMetrics = map[string]*internal.Metric[internal.Gauge]{}
+var client *resty.Client
 
 func main() {
 	parseFlags()
@@ -54,19 +58,24 @@ func main() {
 			Name: metricName,
 		}
 	}
-	for {
+	client = resty.New()
+	go func() {
 		poll()
+	}()
+	go func() {
 		sendMetrics()
-	}
+	}()
+	select {}
 }
 
 func poll() {
-	runtime.ReadMemStats(&m)
-	pollCount.Value++
-	for _, metricName := range metricNames {
-		updateMetric(metricName)
+	for range time.Tick(time.Duration(cfg.PollInterval) * time.Second) {
+		runtime.ReadMemStats(&m)
+		pollCount.Value++
+		for _, metricName := range metricNames {
+			updateMetric(metricName)
+		}
 	}
-	time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 }
 
 func updateMetric(name string) {
@@ -136,27 +145,53 @@ func updateMetric(name string) {
 }
 
 func sendMetrics() {
-	client := resty.New()
-	for _, metricName := range metricNames {
-		metric, ok := gaugeMetrics[metricName]
-		if !ok {
-			return
+	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
+		for _, metricName := range metricNames {
+			metric, ok := gaugeMetrics[metricName]
+			if !ok {
+				return
+			}
+			if metricName == "RandomValue" {
+				_ = 1
+			}
+			req := gzip.CompressedRequest{
+				Request: client.R(),
+			}
+			body, err := json.Marshal(serializer.Metrics{
+				ID:    metricName,
+				MType: string(metric.Value.GetTypeName()),
+				Value: &metric.Value,
+			})
+			if err != nil {
+				log.Printf("error marshalling metric %s - %v: %v\n", metricName, metric.Value, err)
+			}
+			_, err = req.
+				SetBody(body).
+				SetHeader("Content-Type", "application/json; charset=utf-8").
+				Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
+			if err != nil {
+				log.Printf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
+				continue
+			}
 		}
-		if metricName == "RandomValue" {
-			_ = 1
+		req := gzip.CompressedRequest{
+			Request: client.R(),
 		}
-		_, err := client.R().
-			SetHeader("Content-Type", "text/plain").
-			Post(fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.ServerAddress, metric.Value.GetTypeName(), metric.Name, metric.Value))
+		body, err := json.Marshal(serializer.Metrics{
+			ID:    pollCount.Name,
+			MType: string(pollCount.Value.GetTypeName()),
+			Delta: &pollCount.Value,
+		})
 		if err != nil {
-			log.Fatalln(err)
+			log.Printf("error marshalling metric %s - %v: %v\n", pollCount.Name, pollCount.Value, err)
+		}
+		_, err = req.
+			SetBody(body).
+			SetHeader("Content-Type", "application/json").
+			Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
+		if err != nil {
+			log.Printf("error sending counter metric %s=%v: %v\n", pollCount.Name, pollCount.Value, err)
+			continue
 		}
 	}
-	_, err := client.R().
-		SetHeader("Content-Type", "text/plain").
-		Post(fmt.Sprintf("http://%s/update/%s/pollCount/%v", cfg.ServerAddress, pollCount.Value.GetTypeName(), pollCount.Value))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
 }
