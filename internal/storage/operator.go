@@ -73,11 +73,11 @@ func (o *Operator) SaveAllMetrics(fname string) error {
 		return errs.WithMessage(err, "failed to open file")
 	}
 	defer f.Close()
-	metricsJson, err := json.Marshal(metrics)
+	metricsJSON, err := json.Marshal(metrics)
 	if err != nil {
 		return errs.WithMessagef(err, "failed to marshal metrics")
 	}
-	_, err = f.Write(metricsJson)
+	_, err = f.Write(metricsJSON)
 	if err != nil {
 		return errs.WithMessagef(err, "failed to write to file")
 	}
@@ -106,11 +106,11 @@ func (o *Operator) LoadMetrics(fname string) error {
 			return errs.WithMessage(err, "failed to open file")
 		}
 	}
-	metricsJson, err := os.ReadFile(fname)
+	metricsJSON, err := os.ReadFile(fname)
 	if err != nil {
 		return errs.WithMessage(err, "failed to read file")
 	}
-	err = json.Unmarshal(metricsJson, &metrics)
+	err = json.Unmarshal(metricsJSON, &metrics)
 	if err != nil {
 		return errs.WithMessage(err, "failed to unmarshal metrics")
 	}
