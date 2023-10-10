@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/db"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
@@ -254,4 +256,22 @@ func (h *JSONMetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+type DBPingHandler struct {
+	DB *sql.DB
+}
+
+func (h *DBPingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	err := db.Ping(h.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
 }

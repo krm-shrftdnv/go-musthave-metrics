@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
@@ -17,6 +18,7 @@ import (
 
 var counterStorage = storage.MemStorage[internal.Counter]{}
 var gaugeStorage = storage.MemStorage[internal.Gauge]{}
+var db *sql.DB
 
 func run(handler http.Handler) error {
 	logger.Log.Infoln("Running server on ", cfg.ServerAddress)
@@ -62,6 +64,9 @@ func main() {
 	jsonStorageStateHandler := handlers.JSONStorageStateHandler{
 		StorageStateHandler: storageStateHandler,
 	}
+	dbPingHandler := handlers.DBPingHandler{
+		DB: db,
+	}
 
 	r := chi.NewRouter()
 	r.Use(
@@ -81,6 +86,9 @@ func main() {
 	r.Route("/", func(r chi.Router) {
 		r.Handle("/json", &jsonStorageStateHandler)
 		r.Handle("/", &storageStateHandler)
+	})
+	r.Route("/ping", func(r chi.Router) {
+		r.Handle("/", &dbPingHandler)
 	})
 
 	go func() {

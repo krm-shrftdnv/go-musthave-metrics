@@ -15,6 +15,7 @@ func parseFlags() {
 	flag.Int64Var(&cfg.StoreInterval, "i", 30, "store interval")
 	flag.StringVar(&cfg.FileStoragePath, "f", "/tmp/metrics-db.json", "file storage path")
 	flag.BoolVar(&cfg.Restore, "r", true, "restore from file")
+	flag.StringVar(&cfg.DatabaseDsn, "d", "postgres://postgres:postgres@localhost:5432/postgres", "database dsn")
 	flag.Parse()
 
 	err := env.Parse(&cfg)
