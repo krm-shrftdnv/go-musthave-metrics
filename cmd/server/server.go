@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-var counterStorage = storage.MemStorage[internal.Counter]{}
-var gaugeStorage = storage.MemStorage[internal.Gauge]{}
+var counterStorage storage.Storage[internal.Counter]
+var gaugeStorage storage.Storage[internal.Gauge]
 var db *sql.DB
 
 func run(handler http.Handler) error {
@@ -27,8 +27,7 @@ func run(handler http.Handler) error {
 
 func saveMetrics(storeInterval int64) {
 	for range time.Tick(time.Duration(storeInterval) * time.Second) {
-		logger.Log.Infoln("Saving metrics to ", cfg.FileStoragePath)
-		err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
+		err := storage.SingletonOperator.SaveAllMetrics()
 		if err != nil {
 			logger.Log.Errorln(err)
 		}
@@ -41,19 +40,19 @@ func main() {
 
 	Init()
 	updateMetricHandler := handlers.UpdateMetricHandler{
-		GaugeStorage:   &gaugeStorage,
-		CounterStorage: &counterStorage,
+		GaugeStorage:   gaugeStorage,
+		CounterStorage: counterStorage,
 	}
 	if cfg.StoreInterval == 0 {
 		updateMetricHandler.FileStoragePath = cfg.FileStoragePath
 	}
 	storageStateHandler := handlers.StorageStateHandler{
-		GaugeStorage:   &gaugeStorage,
-		CounterStorage: &counterStorage,
+		GaugeStorage:   gaugeStorage,
+		CounterStorage: counterStorage,
 	}
 	metricStateHandler := handlers.MetricStateHandler{
-		GaugeStorage:   &gaugeStorage,
-		CounterStorage: &counterStorage,
+		GaugeStorage:   gaugeStorage,
+		CounterStorage: counterStorage,
 	}
 	jsonUpdateMetricHandler := handlers.JSONUpdateMetricHandler{
 		UpdateMetricHandler: updateMetricHandler,
@@ -106,7 +105,7 @@ func main() {
 
 	<-gracefulShutdown
 	logger.Log.Infoln("Graceful shutdown")
-	err := storage.SingletonOperator.SaveAllMetrics(cfg.FileStoragePath)
+	err := storage.SingletonOperator.SaveAllMetrics()
 	if err != nil {
 		logger.Log.Errorln(err)
 	}

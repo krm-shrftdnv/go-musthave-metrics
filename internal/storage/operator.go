@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
@@ -9,24 +11,25 @@ import (
 	errs "github.com/pkg/errors"
 	"os"
 	"sort"
+	"time"
 )
 
 var SingletonOperator *Operator
 
 type Operator struct {
-	GaugeStorage   *MemStorage[internal.Gauge]
-	CounterStorage *MemStorage[internal.Counter]
+	GaugeStorage   Storage[internal.Gauge]
+	CounterStorage Storage[internal.Counter]
 }
 
-func NewOperator(gs *MemStorage[internal.Gauge], cs *MemStorage[internal.Counter], fname string) *Operator {
+func NewOperator(gs Storage[internal.Gauge], cs Storage[internal.Counter], restore bool) *Operator {
 	if SingletonOperator == nil {
 		SingletonOperator = &Operator{
 			GaugeStorage:   gs,
 			CounterStorage: cs,
 		}
 	}
-	if fname != "" {
-		if err := SingletonOperator.LoadMetrics(fname); err != nil {
+	if restore {
+		if err := SingletonOperator.LoadMetrics(); err != nil {
 			logger.Log.Error(err)
 		}
 	}
@@ -34,7 +37,7 @@ func NewOperator(gs *MemStorage[internal.Gauge], cs *MemStorage[internal.Counter
 }
 
 func (o *Operator) GetAllMetrics() []serializer.Metrics {
-	metrics := []serializer.Metrics{}
+	var metrics []serializer.Metrics
 	counterStorage := o.CounterStorage.GetAll()
 	keys := make([]string, 0, len(counterStorage))
 	for k := range counterStorage {
@@ -66,9 +69,40 @@ func (o *Operator) GetAllMetrics() []serializer.Metrics {
 	return metrics
 }
 
-func (o *Operator) SaveAllMetrics(fname string) error {
+func (o *Operator) SaveAllMetrics() error {
+	switch o.CounterStorage.(type) {
+	case *FileStorage[internal.Counter]:
+		return o.saveAllMetricsToFile()
+	case *DBStorage[internal.Counter]:
+		return o.saveAllMetricsToDB()
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+}
+
+func (o *Operator) LoadMetrics() error {
+	switch o.CounterStorage.(type) {
+	case *FileStorage[internal.Counter]:
+		return o.loadMetricsFromFile()
+	case *DBStorage[internal.Counter]:
+		return o.loadMetricsFromDB()
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+}
+
+func (o *Operator) saveAllMetricsToFile() error {
+	var filePath string
+	switch o.CounterStorage.(type) {
+	case *FileStorage[internal.Counter]:
+		filePath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
+		break
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+	logger.Log.Infoln("Saving metrics to ", filePath)
 	metrics := o.GetAllMetrics()
-	f, err := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errs.WithMessage(err, "failed to open file")
 	}
@@ -84,12 +118,52 @@ func (o *Operator) SaveAllMetrics(fname string) error {
 	return nil
 }
 
-func (o *Operator) LoadMetrics(fname string) error {
+func (o *Operator) saveAllMetricsToDB() error {
+	var db *sql.DB
+	switch o.CounterStorage.(type) {
+	case *DBStorage[internal.Counter]:
+		db = o.CounterStorage.(*DBStorage[internal.Counter]).DB
+		break
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+	logger.Log.Infoln("Saving metrics to DB")
+	metrics := o.GetAllMetrics()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	for _, m := range metrics {
+		row := db.QueryRowContext(ctx, "SELECT id FROM metrics WHERE id = $1", m.ID)
+		var id string
+		err := row.Scan(&id)
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			_, err = db.ExecContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4", m.MType, m.Delta, m.Value, m.ID)
+		} else {
+			_, err = db.ExecContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES ($1, $2, $3, $4)", m.ID, m.MType, m.Delta, m.Value)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operator) loadMetricsFromFile() error {
 	var metrics []serializer.Metrics
-	_, err := os.Open(fname)
+	var filePath string
+	switch o.CounterStorage.(type) {
+	case *FileStorage[internal.Counter]:
+		filePath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
+		break
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+	_, err := os.Open(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			file, err := os.Create(fname)
+			file, err := os.Create(filePath)
 			if err != nil {
 				return errs.WithMessage(err, "failed to create file")
 			}
@@ -97,7 +171,7 @@ func (o *Operator) LoadMetrics(fname string) error {
 			if err != nil {
 				return errs.WithMessage(err, "failed to chmod file")
 			}
-			err = o.SaveAllMetrics(fname)
+			err = o.SaveAllMetrics()
 			if err != nil {
 				return err
 			}
@@ -106,13 +180,50 @@ func (o *Operator) LoadMetrics(fname string) error {
 			return errs.WithMessage(err, "failed to open file")
 		}
 	}
-	metricsJSON, err := os.ReadFile(fname)
+	metricsJSON, err := os.ReadFile(filePath)
 	if err != nil {
 		return errs.WithMessage(err, "failed to read file")
 	}
 	err = json.Unmarshal(metricsJSON, &metrics)
 	if err != nil {
 		return errs.WithMessage(err, "failed to unmarshal metrics")
+	}
+	for _, m := range metrics {
+		switch m.MType {
+		case string(internal.GaugeName):
+			o.GaugeStorage.Set(m.ID, *m.Value)
+		case string(internal.CounterName):
+			o.CounterStorage.Set(m.ID, *m.Delta)
+		}
+	}
+	return nil
+}
+
+func (o *Operator) loadMetricsFromDB() error {
+	var db *sql.DB
+	switch o.CounterStorage.(type) {
+	case *DBStorage[internal.Counter]:
+		db = o.CounterStorage.(*DBStorage[internal.Counter]).DB
+		break
+	default:
+		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+	}
+	metrics := make([]serializer.Metrics, 0)
+	rows, err := db.QueryContext(context.Background(), "SELECT id, mtype, delta, mvalue FROM metrics")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m serializer.Metrics
+		err = rows.Scan(&m.ID, &m.MType, &m.Delta, &m.Value)
+		if err != nil {
+			return err
+		}
+		metrics = append(metrics, m)
+	}
+	if rows.Err() != nil {
+		return rows.Err()
 	}
 	for _, m := range metrics {
 		switch m.MType {

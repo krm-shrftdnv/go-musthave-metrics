@@ -26,3 +26,20 @@ func Ping(db *sql.DB) error {
 	}
 	return nil
 }
+
+func CreateTable(db *sql.DB) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS metrics (
+			id VARCHAR PRIMARY KEY,
+			mtype VARCHAR NOT NULL,
+			delta INT DEFAULT NULL,
+			mvalue FLOAT DEFAULT NULL
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
+}
