@@ -96,7 +96,6 @@ func (o *Operator) saveAllMetricsToFile() error {
 	switch o.CounterStorage.(type) {
 	case *FileStorage[internal.Counter]:
 		filePath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
-		break
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
@@ -123,7 +122,6 @@ func (o *Operator) saveAllMetricsToDB() error {
 	switch o.CounterStorage.(type) {
 	case *DBStorage[internal.Counter]:
 		db = o.CounterStorage.(*DBStorage[internal.Counter]).DB
-		break
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
@@ -156,7 +154,6 @@ func (o *Operator) loadMetricsFromFile() error {
 	switch o.CounterStorage.(type) {
 	case *FileStorage[internal.Counter]:
 		filePath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
-		break
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
@@ -204,7 +201,6 @@ func (o *Operator) loadMetricsFromDB() error {
 	switch o.CounterStorage.(type) {
 	case *DBStorage[internal.Counter]:
 		db = o.CounterStorage.(*DBStorage[internal.Counter]).DB
-		break
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
