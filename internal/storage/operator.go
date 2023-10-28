@@ -133,7 +133,7 @@ func (o *Operator) saveAllMetricsToDB() error {
 		row := db.QueryRowContext(ctx, "SELECT id FROM metrics WHERE id = $1", m.ID)
 		var id string
 		err := row.Scan(&id)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		if id != "" {
