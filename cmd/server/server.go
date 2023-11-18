@@ -38,7 +38,6 @@ func main() {
 	gracefulShutdown := make(chan os.Signal, 1)
 	signal.Notify(gracefulShutdown, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	Init()
 	updateMetricHandler := handlers.UpdateMetricHandler{
 		GaugeStorage:   gaugeStorage,
 		CounterStorage: counterStorage,

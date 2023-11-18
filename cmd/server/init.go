@@ -7,7 +7,7 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 )
 
-func Init() {
+func init() {
 	parseFlags()
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		panic(err)
