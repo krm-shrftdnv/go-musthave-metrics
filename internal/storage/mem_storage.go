@@ -10,6 +10,9 @@ type MemStorage[T Element] struct {
 }
 
 func (ms *MemStorage[T]) Set(key string, value T) {
+	if ms.storage == nil {
+		ms.Init()
+	}
 	ms.storage[key] = &value
 }
 
