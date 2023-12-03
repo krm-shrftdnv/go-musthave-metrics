@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"os"
+	"sort"
+	"time"
+
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
 	errs "github.com/pkg/errors"
-	"os"
-	"sort"
-	"time"
 )
 
 var SingletonOperator *Operator
@@ -126,20 +127,34 @@ func (o *Operator) saveAllMetricsToDB() error {
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
 	logger.Log.Infoln("Saving metrics to DB")
+
+	// Start a transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
 	metrics := o.GetAllMetrics()
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	for _, m := range metrics {
-		row := db.QueryRowContext(ctx, "SELECT id FROM metrics WHERE id = $1", m.ID)
+		row := tx.QueryRowContext(ctx, "SELECT id FROM metrics WHERE id = $1", m.ID)
 		var id string
 		err := row.Scan(&id)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		if id != "" {
-			_, err = db.ExecContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4", m.MType, m.Delta, m.Value, m.ID)
+			_, err = tx.ExecContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4", m.MType, m.Delta, m.Value, m.ID)
 		} else {
-			_, err = db.ExecContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES ($1, $2, $3, $4)", m.ID, m.MType, m.Delta, m.Value)
+			_, err = tx.ExecContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES ($1, $2, $3, $4)", m.ID, m.MType, m.Delta, m.Value)
 		}
 		if err != nil {
 			return err
