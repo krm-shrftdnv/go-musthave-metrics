@@ -2,6 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
@@ -9,11 +15,6 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/handlers"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 var counterStorage storage.Storage[internal.Counter]
@@ -62,6 +63,9 @@ func main() {
 	jsonStorageStateHandler := handlers.JSONStorageStateHandler{
 		StorageStateHandler: storageStateHandler,
 	}
+	jsonUpdateMetricsHandler := handlers.JSONUpdateMetricsHandler{
+		UpdateMetricHandler: updateMetricHandler,
+	}
 	dbPingHandler := handlers.DBPingHandler{
 		DB: db,
 	}
@@ -76,6 +80,9 @@ func main() {
 	r.Route("/update", func(r chi.Router) {
 		r.Handle("/", &jsonUpdateMetricHandler)
 		r.Handle("/{metricType}/{metricName}/{metricValue}", &updateMetricHandler)
+	})
+	r.Route("/updates", func(r chi.Router) {
+		r.Handle("/", &jsonUpdateMetricsHandler)
 	})
 	r.Route("/value", func(r chi.Router) {
 		r.Handle("/", &jsonMetricStateHandler)
