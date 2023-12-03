@@ -202,29 +202,7 @@ func (h *JSONUpdateMetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	for _, metric := range metrics {
-		switch internal.MetricTypeName(metric.MType) {
-		case internal.GaugeName:
-			h.addGauge(metric.ID, *metric.Value)
-			value, ok := h.GaugeStorage.Get(metric.ID)
-			if !ok {
-				http.Error(w, "element not found", http.StatusNotFound)
-				return
-			}
-			metric.Value = value
-		case internal.CounterName:
-			h.addCounter(metric.ID, *metric.Delta)
-			delta, ok := h.CounterStorage.Get(metric.ID)
-			if !ok {
-				http.Error(w, "element not found", http.StatusNotFound)
-				return
-			}
-			metric.Delta = delta
-		default:
-			http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
-			return
-		}
-	}
+	h.addMetrics(metrics)
 	resp, err := json.Marshal(metrics)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -236,6 +214,17 @@ func (h *JSONUpdateMetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+func (h *JSONUpdateMetricsHandler) addMetrics(metrics []serializer.Metrics) {
+	for _, metric := range metrics {
+		switch internal.MetricTypeName(metric.MType) {
+		case internal.GaugeName:
+			h.addGauge(metric.ID, *metric.Value)
+		case internal.CounterName:
+			h.addCounter(metric.ID, *metric.Delta)
+		}
 	}
 }
 
