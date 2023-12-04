@@ -128,7 +128,6 @@ func (o *Operator) saveAllMetricsToDB() error {
 	}
 	logger.Log.Infoln("Saving metrics to DB")
 
-	// Start a transaction
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -145,17 +144,30 @@ func (o *Operator) saveAllMetricsToDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	for _, m := range metrics {
-		row := tx.QueryRowContext(ctx, "SELECT id FROM metrics WHERE id = $1", m.ID)
+		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = @id")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+		row, err := stmt.QueryContext(ctx, sql.Named("id", m.ID))
+		if err != nil {
+			return err
+		}
 		var id string
-		err := row.Scan(&id)
+		err = row.Scan(&id)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		if id != "" {
-			_, err = tx.ExecContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4", m.MType, m.Delta, m.Value, m.ID)
+			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = @mtype, delta = @delta, mvalue = @mvalue WHERE id = @id")
 		} else {
-			_, err = tx.ExecContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES ($1, $2, $3, $4)", m.ID, m.MType, m.Delta, m.Value)
+			stmt, err = tx.PrepareContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES (@id, @mtype, @delta, @mvalue)")
 		}
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+		_, err = stmt.ExecContext(ctx, sql.Named("id", m.ID), sql.Named("mtype", m.MType), sql.Named("delta", m.Delta), sql.Named("mvalue", m.Value))
 		if err != nil {
 			return err
 		}
