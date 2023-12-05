@@ -157,9 +157,11 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		var id string
-		err = rows.Scan(&id)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
+		for rows.Next() {
+			err = rows.Scan(&id)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 		}
 		if id != "" {
 			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4")
