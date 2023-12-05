@@ -149,12 +149,15 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		defer stmt.Close()
-		row, err := stmt.QueryContext(ctx, sql.Named("id", m.ID))
+		rows, err := stmt.QueryContext(ctx, sql.Named("id", m.ID))
 		if err != nil {
 			return err
 		}
+		if err = rows.Err(); err != nil {
+			return err
+		}
 		var id string
-		err = row.Scan(&id)
+		err = rows.Scan(&id)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -167,7 +170,12 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		defer stmt.Close()
-		_, err = stmt.ExecContext(ctx, sql.Named("id", m.ID), sql.Named("mtype", m.MType), sql.Named("delta", m.Delta), sql.Named("mvalue", m.Value))
+		_, err = stmt.ExecContext(ctx, 
+			sql.Named("id", m.ID), 
+			sql.Named("mtype", m.MType), 
+			sql.Named("delta", m.Delta), 
+			sql.Named("mvalue", m.Value)
+		)
 		if err != nil {
 			return err
 		}
