@@ -144,12 +144,12 @@ func (o *Operator) saveAllMetricsToDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	for _, m := range metrics {
-		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = :id")
+		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = ?")
 		if err != nil {
 			return err
 		}
 		defer stmt.Close()
-		rows, err := stmt.QueryContext(ctx, sql.Named("id", m.ID))
+		rows, err := stmt.QueryContext(ctx, m.ID)
 		if err != nil {
 			return err
 		}
@@ -162,20 +162,15 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		if id != "" {
-			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = :mtype, delta = :delta, mvalue = :mvalue WHERE id = :id")
+			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = ?, delta = ?, mvalue = ? WHERE id = ?")
 		} else {
-			stmt, err = tx.PrepareContext(ctx, "INSERT INTO metrics (id, mtype, delta, mvalue) VALUES (:id, :mtype, :delta, :mvalue)")
+			stmt, err = tx.PrepareContext(ctx, "INSERT INTO metrics (mtype, delta, mvalue, id) VALUES (?, ?, ?, ?)")
 		}
 		if err != nil {
 			return err
 		}
 		defer stmt.Close()
-		_, err = stmt.ExecContext(ctx,
-			sql.Named("id", m.ID),
-			sql.Named("mtype", m.MType),
-			sql.Named("delta", m.Delta),
-			sql.Named("mvalue", m.Value),
-		)
+		_, err = stmt.ExecContext(ctx, m.MType, m.Delta, m.Value, m.ID)
 		if err != nil {
 			return err
 		}
