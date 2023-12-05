@@ -144,7 +144,7 @@ func (o *Operator) saveAllMetricsToDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	for _, m := range metrics {
-		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = ?")
+		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = $1")
 		if err != nil {
 			return err
 		}
@@ -162,9 +162,9 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		if id != "" {
-			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = ?, delta = ?, mvalue = ? WHERE id = ?")
+			stmt, err = tx.PrepareContext(ctx, "UPDATE metrics SET mtype = $1, delta = $2, mvalue = $3 WHERE id = $4")
 		} else {
-			stmt, err = tx.PrepareContext(ctx, "INSERT INTO metrics (mtype, delta, mvalue, id) VALUES (?, ?, ?, ?)")
+			stmt, err = tx.PrepareContext(ctx, "INSERT INTO metrics (mtype, delta, mvalue, id) VALUES ($1, $2, $3, $4)")
 		}
 		if err != nil {
 			return err
