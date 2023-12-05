@@ -170,11 +170,11 @@ func (o *Operator) saveAllMetricsToDB() error {
 			return err
 		}
 		defer stmt.Close()
-		_, err = stmt.ExecContext(ctx, 
-			sql.Named("id", m.ID), 
-			sql.Named("mtype", m.MType), 
-			sql.Named("delta", m.Delta), 
-			sql.Named("mvalue", m.Value)
+		_, err = stmt.ExecContext(ctx,
+			sql.Named("id", m.ID),
+			sql.Named("mtype", m.MType),
+			sql.Named("delta", m.Delta),
+			sql.Named("mvalue", m.Value),
 		)
 		if err != nil {
 			return err
