@@ -146,6 +146,7 @@ func updateMetric(name string) {
 }
 
 func sendMetrics() {
+	const maxAttempts = 3
 	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
 		var metrics []serializer.Metrics
 		for _, metricName := range metricNames {
@@ -181,8 +182,16 @@ func sendMetrics() {
 			SetBody(body).
 			SetHeader("Content-Type", "application/json; charset=utf-8").
 			Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddress))
-		if err != nil {
-			log.Printf("error sending metrics: %v\n", err)
+		i := 0
+		for err != nil && i < maxAttempts {
+			log.Printf("error sending metrics: %v. waiting %d seconds\n", err, 2*i+1)
+			time.Sleep(time.Duration(2*i+1) * time.Second)
+			log.Printf("retrying: attempt %d\n", i+1)
+			_, err = req.
+				SetBody(body).
+				SetHeader("Content-Type", "application/json; charset=utf-8").
+				Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddress))
+			i++
 		}
 	}
 }
