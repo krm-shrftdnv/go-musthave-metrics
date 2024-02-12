@@ -53,5 +53,5 @@ func init() {
 			gaugeStorage = &storage.MemStorage[internal.Gauge]{}
 		}
 	}
-	storage.SingletonOperator = storage.NewOperator(gaugeStorage, counterStorage, cfg.Restore)
+	storage.SingletonOperator = storage.NewOperator(gaugeStorage, counterStorage, cfg.Restore && cfg.FileStoragePath != "")
 }

@@ -53,16 +53,3 @@ func (c *Counter) Scan(value interface{}) error {
 	*c = Counter(value.(int64))
 	return nil
 }
-
-//func (g Gauge) Value() (driver.Value, error) {
-//	return float64(g), nil
-//}
-//
-//func (g *Gauge) Scan(value interface{}) error {
-//	if value == nil {
-//		*g = 0
-//		return nil
-//	}
-//	*g = Gauge(value.(float64))
-//	return nil
-//}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -102,9 +103,9 @@ func (o *Operator) saveAllMetricsToFile() error {
 	}
 	logger.Log.Infoln("Saving metrics to ", filePath)
 	metrics := o.GetAllMetrics()
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := openFile(filePath)
 	if err != nil {
-		return errs.WithMessage(err, "failed to open file")
+		return err
 	}
 	defer f.Close()
 	metricsJSON, err := json.Marshal(metrics)
@@ -182,34 +183,23 @@ func (o *Operator) saveAllMetricsToDB() error {
 
 func (o *Operator) loadMetricsFromFile() error {
 	var metrics []serializer.Metrics
-	var filePath string
+	var absPath string
 	switch o.CounterStorage.(type) {
 	case *FileStorage[internal.Counter]:
-		filePath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
+		absPath = o.CounterStorage.(*FileStorage[internal.Counter]).FilePath
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
-	_, err := os.Open(filePath)
+	f, err := openFile(absPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			file, err := os.Create(filePath)
-			if err != nil {
-				return errs.WithMessage(err, "failed to create file")
-			}
-			err = file.Chmod(0666)
-			if err != nil {
-				return errs.WithMessage(err, "failed to chmod file")
-			}
-			err = o.SaveAllMetrics()
-			if err != nil {
-				return err
-			}
-
-		} else {
-			return errs.WithMessage(err, "failed to open file")
-		}
+		return err
 	}
-	metricsJSON, err := os.ReadFile(filePath)
+	defer f.Close()
+	err = o.SaveAllMetrics()
+	if err != nil {
+		return err
+	}
+	metricsJSON, err := os.ReadFile(absPath)
 	if err != nil {
 		return errs.WithMessage(err, "failed to read file")
 	}
@@ -262,4 +252,23 @@ func (o *Operator) loadMetricsFromDB() error {
 		}
 	}
 	return nil
+}
+
+func openFile(absPath string) (*os.File, error) {
+	f, err := os.OpenFile(absPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			err := os.MkdirAll(filepath.Dir(absPath), 0644)
+			if err != nil {
+				return nil, errs.WithMessage(err, "failed to create directory")
+			}
+			f, err = os.Create(absPath)
+			if err != nil {
+				return nil, errs.WithMessage(err, "failed to create file")
+			}
+		} else {
+			return nil, errs.WithMessage(err, "failed to open file")
+		}
+	}
+	return f, nil
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -50,15 +51,19 @@ var pollCount = internal.Metric[internal.Counter]{
 	Value: 0,
 }
 var gaugeMetrics = map[string]*internal.Metric[internal.Gauge]{}
+var lock = sync.RWMutex{}
 var client *resty.Client
 
 func main() {
 	parseFlags()
+	lock.Lock()
+	defer lock.Unlock()
 	for _, metricName := range metricNames {
 		gaugeMetrics[metricName] = &internal.Metric[internal.Gauge]{
 			Name: metricName,
 		}
 	}
+	lock.Unlock()
 	client = resty.New()
 	go func() {
 		poll()
@@ -80,6 +85,8 @@ func poll() {
 }
 
 func updateMetric(name string) {
+	lock.Lock()
+	defer lock.Unlock()
 	metric, ok := gaugeMetrics[name]
 	randNum := internal.Gauge(rand.Float64()) * 1000
 	if !ok {
@@ -149,6 +156,8 @@ func sendMetrics() {
 	const maxAttempts = 3
 	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
 		var metrics []serializer.Metrics
+		lock.RLock()
+		defer lock.RUnlock()
 		for _, metricName := range metricNames {
 			metric, ok := gaugeMetrics[metricName]
 			if !ok {

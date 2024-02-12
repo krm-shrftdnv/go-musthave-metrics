@@ -103,7 +103,7 @@ func main() {
 		}
 	}()
 
-	if cfg.StoreInterval > 0 {
+	if cfg.StoreInterval > 0 && cfg.FileStoragePath != "" {
 		go func() {
 			saveMetrics(cfg.StoreInterval)
 		}()
