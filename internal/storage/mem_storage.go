@@ -6,15 +6,14 @@ import (
 	"sync"
 )
 
-var lock = sync.RWMutex{}
-
 type MemStorage[T Element] struct {
+	mx      sync.RWMutex
 	storage map[string]*T
 }
 
 func (ms *MemStorage[T]) Set(key string, value T) {
-	lock.Lock()
-	defer lock.Unlock()
+	ms.mx.Lock()
+	defer ms.mx.Unlock()
 	if ms.storage == nil {
 		ms.Init()
 	}
@@ -22,27 +21,29 @@ func (ms *MemStorage[T]) Set(key string, value T) {
 }
 
 func (ms *MemStorage[T]) Get(key string) (*T, bool) {
-	lock.RLock()
-	defer lock.RUnlock()
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
 	value, ok := ms.storage[key]
 	return value, ok
 }
 
 func (ms *MemStorage[T]) GetAll() map[string]*T {
-	lock.RLock()
-	defer lock.RUnlock()
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
 	return ms.storage
 }
 
 func (ms *MemStorage[T]) Init() {
+	ms.mx.Lock()
+	defer ms.mx.Unlock()
 	if ms.storage == nil {
 		ms.storage = make(map[string]*T)
 	}
 }
 
 func (ms *MemStorage[Element]) String() string {
-	lock.RLock()
-	defer lock.RUnlock()
+	ms.mx.RLock()
+	defer ms.mx.RUnlock()
 	sb := &strings.Builder{}
 	for k, v := range ms.storage {
 		sb.WriteString(k)

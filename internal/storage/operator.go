@@ -39,7 +39,7 @@ func NewOperator(gs Storage[internal.Gauge], cs Storage[internal.Counter], resto
 }
 
 func (o *Operator) GetAllMetrics() []serializer.Metrics {
-	var metrics []serializer.Metrics
+	metrics := make([]serializer.Metrics, 0)
 	counterStorage := o.CounterStorage.GetAll()
 	keys := make([]string, 0, len(counterStorage))
 	for k := range counterStorage {
@@ -78,7 +78,10 @@ func (o *Operator) SaveAllMetrics() error {
 	case *DBStorage[internal.Counter]:
 		return o.saveAllMetricsToDB()
 	default:
-		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
+		{
+			logger.Log.Infoln("metrics will not be saved")
+			return nil
+		}
 	}
 }
 
@@ -195,17 +198,15 @@ func (o *Operator) loadMetricsFromFile() error {
 		return err
 	}
 	defer f.Close()
-	err = o.SaveAllMetrics()
-	if err != nil {
-		return err
-	}
 	metricsJSON, err := os.ReadFile(absPath)
 	if err != nil {
 		return errs.WithMessage(err, "failed to read file")
 	}
-	err = json.Unmarshal(metricsJSON, &metrics)
-	if err != nil {
-		return errs.WithMessage(err, "failed to unmarshal metrics")
+	if (metricsJSON != nil) && (len(metricsJSON) != 0) {
+		err = json.Unmarshal(metricsJSON, &metrics)
+		if err != nil {
+			return errs.WithMessage(err, "failed to unmarshal metrics")
+		}
 	}
 	for _, m := range metrics {
 		switch m.MType {
