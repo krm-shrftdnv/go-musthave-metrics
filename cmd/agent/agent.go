@@ -207,6 +207,7 @@ func sendMetrics() {
 	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
 		var metrics []serializer.Metrics
 		gaugeMetricsMap := gaugeMetrics.GetAll()
+		gaugeMetrics.mx.RLock()
 		for k, v := range gaugeMetricsMap {
 			metrics = append(metrics, serializer.Metrics{
 				ID:    k,
@@ -220,6 +221,7 @@ func sendMetrics() {
 			MType: string(pollCountMetric.Value.GetTypeName()),
 			Delta: &pollCountMetric.Value,
 		})
+		gaugeMetrics.mx.RUnlock()
 
 		if len(metrics) == 0 {
 			continue

@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
@@ -17,6 +19,17 @@ import (
 )
 
 var SingletonOperator *Operator
+
+type SyncWriter struct {
+	mx     sync.Mutex
+	Writer io.Writer
+}
+
+func (w *SyncWriter) Write(p []byte) (n int, err error) {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+	return w.Writer.Write(p)
+}
 
 type Operator struct {
 	GaugeStorage   Storage[internal.Gauge]
@@ -111,11 +124,15 @@ func (o *Operator) saveAllMetricsToFile() error {
 		return err
 	}
 	defer f.Close()
+	wr := &SyncWriter{
+		Writer: f,
+		mx:     sync.Mutex{},
+	}
 	metricsJSON, err := json.Marshal(metrics)
 	if err != nil {
 		return errs.WithMessagef(err, "failed to marshal metrics")
 	}
-	_, err = f.Write(metricsJSON)
+	_, err = wr.Write(metricsJSON)
 	if err != nil {
 		return errs.WithMessagef(err, "failed to write to file")
 	}
@@ -259,7 +276,7 @@ func openFile(absPath string) (*os.File, error) {
 	f, err := os.OpenFile(absPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err := os.MkdirAll(filepath.Dir(absPath), 0644)
+			err := os.MkdirAll(filepath.Dir(absPath), 0777)
 			if err != nil {
 				return nil, errs.WithMessage(err, "failed to create directory")
 			}
