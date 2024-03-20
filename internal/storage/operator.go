@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
@@ -20,23 +18,12 @@ import (
 
 var SingletonOperator *Operator
 
-type SyncWriter struct {
-	mx     sync.Mutex
-	Writer io.Writer
-}
-
-func (w *SyncWriter) Write(p []byte) (n int, err error) {
-	w.mx.Lock()
-	defer w.mx.Unlock()
-	return w.Writer.Write(p)
-}
-
 type Operator struct {
 	GaugeStorage   Storage[internal.Gauge]
 	CounterStorage Storage[internal.Counter]
 }
 
-func NewOperator(gs Storage[internal.Gauge], cs Storage[internal.Counter], restore bool) *Operator {
+func NewOperator(ctx context.Context, gs Storage[internal.Gauge], cs Storage[internal.Counter], restore bool) (*Operator, error) {
 	if SingletonOperator == nil {
 		SingletonOperator = &Operator{
 			GaugeStorage:   gs,
@@ -44,11 +31,11 @@ func NewOperator(gs Storage[internal.Gauge], cs Storage[internal.Counter], resto
 		}
 	}
 	if restore {
-		if err := SingletonOperator.LoadMetrics(); err != nil {
-			logger.Log.Error(err)
+		if err := SingletonOperator.LoadMetrics(ctx); err != nil {
+			return nil, err
 		}
 	}
-	return SingletonOperator
+	return SingletonOperator, nil
 }
 
 func (o *Operator) GetAllMetrics() []serializer.Metrics {
@@ -84,12 +71,12 @@ func (o *Operator) GetAllMetrics() []serializer.Metrics {
 	return metrics
 }
 
-func (o *Operator) SaveAllMetrics() error {
+func (o *Operator) SaveAllMetrics(ctx context.Context) error {
 	switch o.CounterStorage.(type) {
 	case *FileStorage[internal.Counter]:
 		return o.saveAllMetricsToFile()
 	case *DBStorage[internal.Counter]:
-		return o.saveAllMetricsToDB()
+		return o.saveAllMetricsToDB(ctx)
 	default:
 		{
 			logger.Log.Infoln("metrics will not be saved")
@@ -98,12 +85,12 @@ func (o *Operator) SaveAllMetrics() error {
 	}
 }
 
-func (o *Operator) LoadMetrics() error {
+func (o *Operator) LoadMetrics(ctx context.Context) error {
 	switch o.CounterStorage.(type) {
 	case *FileStorage[internal.Counter]:
 		return o.loadMetricsFromFile()
 	case *DBStorage[internal.Counter]:
-		return o.loadMetricsFromDB()
+		return o.loadMetricsFromDB(ctx)
 	default:
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
@@ -124,22 +111,20 @@ func (o *Operator) saveAllMetricsToFile() error {
 		return err
 	}
 	defer f.Close()
-	wr := &SyncWriter{
-		Writer: f,
-		mx:     sync.Mutex{},
-	}
+	defer f.Sync()
 	metricsJSON, err := json.Marshal(metrics)
+	logger.Log.Infoln(string(metricsJSON))
 	if err != nil {
 		return errs.WithMessagef(err, "failed to marshal metrics")
 	}
-	_, err = wr.Write(metricsJSON)
+	_, err = f.Write(metricsJSON)
 	if err != nil {
 		return errs.WithMessagef(err, "failed to write to file")
 	}
-	return nil
+	return f.Close()
 }
 
-func (o *Operator) saveAllMetricsToDB() error {
+func (o *Operator) saveAllMetricsToDB(ctx context.Context) error {
 	var db *sql.DB
 	switch o.CounterStorage.(type) {
 	case *DBStorage[internal.Counter]:
@@ -162,7 +147,7 @@ func (o *Operator) saveAllMetricsToDB() error {
 	}()
 
 	metrics := o.GetAllMetrics()
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 	for _, m := range metrics {
 		stmt, err := tx.PrepareContext(ctx, "SELECT id FROM metrics WHERE id = $1")
@@ -215,6 +200,7 @@ func (o *Operator) loadMetricsFromFile() error {
 		return err
 	}
 	defer f.Close()
+	defer f.Sync()
 	metricsJSON, err := os.ReadFile(absPath)
 	if err != nil {
 		return errs.WithMessage(err, "failed to read file")
@@ -236,7 +222,7 @@ func (o *Operator) loadMetricsFromFile() error {
 	return nil
 }
 
-func (o *Operator) loadMetricsFromDB() error {
+func (o *Operator) loadMetricsFromDB(ctx context.Context) error {
 	var db *sql.DB
 	switch o.CounterStorage.(type) {
 	case *DBStorage[internal.Counter]:
@@ -245,7 +231,7 @@ func (o *Operator) loadMetricsFromDB() error {
 		return errs.WithMessage(errors.New("unsupported storage"), "unsupported storage")
 	}
 	metrics := make([]serializer.Metrics, 0)
-	rows, err := db.QueryContext(context.Background(), "SELECT id, mtype, delta, mvalue FROM metrics")
+	rows, err := db.QueryContext(ctx, "SELECT id, mtype, delta, mvalue FROM metrics")
 	if err != nil {
 		return err
 	}
@@ -273,7 +259,7 @@ func (o *Operator) loadMetricsFromDB() error {
 }
 
 func openFile(absPath string) (*os.File, error) {
-	f, err := os.OpenFile(absPath, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(absPath, os.O_CREATE|os.O_RDWR|os.O_SYNC, 0644)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			err := os.MkdirAll(filepath.Dir(absPath), 0777)

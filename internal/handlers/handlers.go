@@ -47,7 +47,7 @@ func (h *UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
 	}
 	if h.FileStoragePath != "" {
-		err := storage.SingletonOperator.SaveAllMetrics()
+		err := storage.SingletonOperator.SaveAllMetrics(r.Context())
 		if err != nil {
 			logger.Log.Errorln(err)
 		}
@@ -314,7 +314,7 @@ func (h *DBPingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	err := db.Ping(h.DB)
+	err := db.Ping(r.Context(), h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

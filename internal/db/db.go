@@ -14,9 +14,9 @@ import (
 
 const maxAttempts = 3
 
-func Init(db *sql.DB, databaseDsn string) *sql.DB {
+func Init(db *sql.DB, databaseDsn string) (*sql.DB, error) {
 	if db != nil {
-		return db
+		return db, nil
 	}
 	db, err := sql.Open("pgx", databaseDsn)
 	i := 0
@@ -29,13 +29,16 @@ func Init(db *sql.DB, databaseDsn string) *sql.DB {
 		i++
 	}
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return db
+	return db, nil
 }
 
-func Ping(db *sql.DB) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+func Ping(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("database connection not specified")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 	err := db.PingContext(ctx)
 	i := 0
@@ -53,8 +56,8 @@ func Ping(db *sql.DB) error {
 	return nil
 }
 
-func CreateTable(db *sql.DB) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+func CreateTable(ctx context.Context, db *sql.DB) error {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 	_, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS metrics (
