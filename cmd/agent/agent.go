@@ -3,15 +3,70 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"math/rand"
+	"runtime"
+	"sync"
+	"time"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
-	"log"
-	"math/rand"
-	"runtime"
-	"time"
 )
+
+type SafeMetricsMap struct {
+	mx sync.RWMutex
+	m  map[string]*internal.Metric[internal.Gauge]
+}
+
+func (s *SafeMetricsMap) Get(key string) (*internal.Metric[internal.Gauge], bool) {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+	val, ok := s.m[key]
+	return val, ok
+}
+
+func (s *SafeMetricsMap) Set(key string, value internal.Metric[internal.Gauge]) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+	s.m[key] = &value
+}
+
+func (s *SafeMetricsMap) Update(key string, newValue internal.Gauge) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+	s.m[key].Value = newValue
+}
+
+func (s *SafeMetricsMap) GetAll() map[string]*internal.Metric[internal.Gauge] {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+	return s.m
+}
+
+type SafeMetric struct {
+	mx sync.RWMutex
+	m  *internal.Metric[internal.Counter]
+}
+
+func (s *SafeMetric) Get() *internal.Metric[internal.Counter] {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+	return s.m
+}
+
+func (s *SafeMetric) Set(value internal.Metric[internal.Counter]) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+	s.m = &value
+}
+
+func (s *SafeMetric) Inc() {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+	s.m.Value++
+}
 
 var m runtime.MemStats
 var metricNames = []string{
@@ -44,19 +99,22 @@ var metricNames = []string{
 	"TotalAlloc",
 	"RandomValue",
 }
-var pollCount = internal.Metric[internal.Counter]{
-	Name:  "PollCount",
-	Value: 0,
+var pollCount = SafeMetric{
+	m: &internal.Metric[internal.Counter]{
+		Name:  "PollCount",
+		Value: 0,
+	},
 }
-var gaugeMetrics = map[string]*internal.Metric[internal.Gauge]{}
+var gaugeMetrics = &SafeMetricsMap{
+	m: make(map[string]*internal.Metric[internal.Gauge]),
+}
 var client *resty.Client
 
 func main() {
 	parseFlags()
+
 	for _, metricName := range metricNames {
-		gaugeMetrics[metricName] = &internal.Metric[internal.Gauge]{
-			Name: metricName,
-		}
+		gaugeMetrics.Set(metricName, internal.Metric[internal.Gauge]{Name: metricName})
 	}
 	client = resty.New()
 	go func() {
@@ -71,7 +129,7 @@ func main() {
 func poll() {
 	for range time.Tick(time.Duration(cfg.PollInterval) * time.Second) {
 		runtime.ReadMemStats(&m)
-		pollCount.Value++
+		pollCount.Inc()
 		for _, metricName := range metricNames {
 			updateMetric(metricName)
 		}
@@ -79,119 +137,121 @@ func poll() {
 }
 
 func updateMetric(name string) {
-	metric, ok := gaugeMetrics[name]
+	_, ok := gaugeMetrics.Get(name)
 	randNum := internal.Gauge(rand.Float64()) * 1000
 	if !ok {
 		return
 	}
 	switch name {
 	case "Alloc":
-		metric.Value = internal.Gauge(m.Alloc) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.Alloc)/(1024*1024))
 	case "BuckHashSys":
-		metric.Value = internal.Gauge(m.BuckHashSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.BuckHashSys)/(1024*1024))
 	case "Frees":
-		metric.Value = internal.Gauge(m.Frees) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.Frees)/(1024*1024))
 	case "GCCPUFraction":
-		metric.Value = internal.Gauge(m.GCCPUFraction) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.GCCPUFraction)/(1024*1024))
 	case "GCSys":
-		metric.Value = internal.Gauge(m.GCSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.GCSys)/(1024*1024))
 	case "HeapAlloc":
-		metric.Value = internal.Gauge(m.HeapAlloc) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapAlloc)/(1024*1024))
 	case "HeapIdle":
-		metric.Value = internal.Gauge(m.HeapIdle) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapIdle)/(1024*1024))
 	case "HeapInuse":
-		metric.Value = internal.Gauge(m.HeapInuse) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapInuse)/(1024*1024))
 	case "HeapObjects":
-		metric.Value = internal.Gauge(m.HeapObjects) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapObjects)/(1024*1024))
 	case "HeapReleased":
-		metric.Value = internal.Gauge(m.HeapReleased) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapReleased)/(1024*1024))
 	case "HeapSys":
-		metric.Value = internal.Gauge(m.HeapSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.HeapSys)/(1024*1024))
 	case "LastGC":
-		metric.Value = internal.Gauge(m.LastGC) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.LastGC)/(1024*1024))
 	case "Lookups":
-		metric.Value = internal.Gauge(m.Lookups) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.Lookups)/(1024*1024))
 	case "MCacheInuse":
-		metric.Value = internal.Gauge(m.MCacheInuse) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.MCacheInuse)/(1024*1024))
 	case "MCacheSys":
-		metric.Value = internal.Gauge(m.MCacheSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.MCacheSys)/(1024*1024))
 	case "MSpanInuse":
-		metric.Value = internal.Gauge(m.MSpanInuse) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.MSpanInuse)/(1024*1024))
 	case "MSpanSys":
-		metric.Value = internal.Gauge(m.MSpanSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.MSpanSys)/(1024*1024))
 	case "Mallocs":
-		metric.Value = internal.Gauge(m.Mallocs) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.Mallocs)/(1024*1024))
 	case "NextGC":
-		metric.Value = internal.Gauge(m.NextGC) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.NextGC)/(1024*1024))
 	case "NumForcedGC":
-		metric.Value = internal.Gauge(m.NumForcedGC) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.NumForcedGC)/(1024*1024))
 	case "NumGC":
-		metric.Value = internal.Gauge(m.NumGC) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.NumGC)/(1024*1024))
 	case "OtherSys":
-		metric.Value = internal.Gauge(m.OtherSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.OtherSys)/(1024*1024))
 	case "PauseTotalNs":
-		metric.Value = internal.Gauge(m.PauseTotalNs) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.PauseTotalNs)/(1024*1024))
 	case "StackInuse":
-		metric.Value = internal.Gauge(m.StackInuse) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.StackInuse)/(1024*1024))
 	case "StackSys":
-		metric.Value = internal.Gauge(m.StackSys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.StackSys)/(1024*1024))
 	case "Sys":
-		metric.Value = internal.Gauge(m.Sys) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.Sys)/(1024*1024))
 	case "TotalAlloc":
-		metric.Value = internal.Gauge(m.TotalAlloc) / (1024 * 1024)
+		gaugeMetrics.Update(name, internal.Gauge(m.TotalAlloc)/(1024*1024))
 	case "RandomValue":
-		metric.Value = randNum
+		gaugeMetrics.Update(name, randNum)
 	}
 }
 
 func sendMetrics() {
+	const maxAttempts = 3
 	for range time.Tick(time.Duration(cfg.ReportInterval) * time.Second) {
-		for _, metricName := range metricNames {
-			metric, ok := gaugeMetrics[metricName]
-			if !ok {
-				return
-			}
-			if metricName == "RandomValue" {
-				_ = 1
-			}
-			req := gzip.CompressedRequest{
-				Request: client.R(),
-			}
-			body, err := json.Marshal(serializer.Metrics{
-				ID:    metricName,
-				MType: string(metric.Value.GetTypeName()),
-				Value: &metric.Value,
+		var metrics []serializer.Metrics
+		gaugeMetricsMap := gaugeMetrics.GetAll()
+		gaugeMetrics.mx.RLock()
+		for k, v := range gaugeMetricsMap {
+			metrics = append(metrics, serializer.Metrics{
+				ID:    k,
+				MType: string(v.Value.GetTypeName()),
+				Value: &v.Value,
 			})
-			if err != nil {
-				log.Printf("error marshalling metric %s - %v: %v\n", metricName, metric.Value, err)
-			}
-			_, err = req.
-				SetBody(body).
-				SetHeader("Content-Type", "application/json; charset=utf-8").
-				Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
-			if err != nil {
-				log.Printf("error sending gauge metric %s=%v: %v\n", metricName, metric.Value, err)
-				continue
-			}
 		}
+		pollCountMetric := pollCount.Get()
+		metrics = append(metrics, serializer.Metrics{
+			ID:    pollCountMetric.Name,
+			MType: string(pollCountMetric.Value.GetTypeName()),
+			Delta: &pollCountMetric.Value,
+		})
+		gaugeMetrics.mx.RUnlock()
+
+		if len(metrics) == 0 {
+			continue
+		}
+
 		req := gzip.CompressedRequest{
 			Request: client.R(),
 		}
-		body, err := json.Marshal(serializer.Metrics{
-			ID:    pollCount.Name,
-			MType: string(pollCount.Value.GetTypeName()),
-			Delta: &pollCount.Value,
-		})
+		pollCount.mx.RLock()
+		gaugeMetrics.mx.RLock()
+		body, err := json.Marshal(metrics)
+		pollCount.mx.RUnlock()
+		gaugeMetrics.mx.RUnlock()
 		if err != nil {
-			log.Printf("error marshalling metric %s - %v: %v\n", pollCount.Name, pollCount.Value, err)
+			log.Printf("error marshalling metrics: %v\n", err)
 		}
 		_, err = req.
 			SetBody(body).
-			SetHeader("Content-Type", "application/json").
-			Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddress))
-		if err != nil {
-			log.Printf("error sending counter metric %s=%v: %v\n", pollCount.Name, pollCount.Value, err)
-			continue
+			SetHeader("Content-Type", "application/json; charset=utf-8").
+			Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddress))
+		i := 0
+		for err != nil && i < maxAttempts {
+			log.Printf("error sending metrics: %v. waiting %d seconds\n", err, 2*i+1)
+			time.Sleep(time.Duration(2*i+1) * time.Second)
+			log.Printf("retrying: attempt %d\n", i+1)
+			_, err = req.
+				SetBody(body).
+				SetHeader("Content-Type", "application/json; charset=utf-8").
+				Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddress))
+			i++
 		}
 	}
 }

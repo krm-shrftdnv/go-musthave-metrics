@@ -1,6 +1,9 @@
 package internal
 
-import "strconv"
+import (
+	"database/sql/driver"
+	"strconv"
+)
 
 type MetricTypeName string
 
@@ -36,4 +39,17 @@ func (c Counter) GetTypeName() MetricTypeName {
 
 func (c Counter) String() string {
 	return strconv.FormatInt(int64(c), 10)
+}
+
+func (c Counter) Value() (driver.Value, error) {
+	return int64(c), nil
+}
+
+func (c *Counter) Scan(value interface{}) error {
+	if value == nil {
+		*c = 0
+		return nil
+	}
+	*c = Counter(value.(int64))
+	return nil
 }
