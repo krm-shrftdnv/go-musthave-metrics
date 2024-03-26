@@ -15,7 +15,9 @@ func (ms *MemStorage[T]) Set(key string, value T) {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 	if ms.storage == nil {
+		ms.mx.Unlock()
 		ms.Init()
+		ms.mx.Lock()
 	}
 	ms.storage[key] = &value
 }
