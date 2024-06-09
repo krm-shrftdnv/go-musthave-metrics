@@ -113,6 +113,10 @@ func (o *Operator) saveAllMetricsToFile() error {
 	defer f.Close()
 	defer f.Sync()
 	metricsJSON, err := json.Marshal(metrics)
+	valid := json.Valid(metricsJSON)
+	if !valid {
+		return errs.WithMessage(errors.New("invalid json"), "invalid json")
+	}
 	if err != nil {
 		return errs.WithMessagef(err, "failed to marshal metrics")
 	}
