@@ -106,19 +106,24 @@ func (o *Operator) saveAllMetricsToFile() error {
 	}
 	logger.Log.Infoln("Saving metrics to ", filePath)
 	metrics := o.GetAllMetrics()
+	metricsJSON, err := json.Marshal(metrics)
+	if err != nil {
+		return errs.WithMessagef(err, "failed to marshal metrics")
+	}
 	f, err := openFile(filePath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	defer f.Sync()
-	metricsJSON, err := json.Marshal(metrics)
-	valid := json.Valid(metricsJSON)
-	if !valid {
-		return errs.WithMessage(errors.New("invalid json"), "invalid json")
-	}
+
+	err = f.Truncate(0)
 	if err != nil {
-		return errs.WithMessagef(err, "failed to marshal metrics")
+		return errs.WithMessagef(err, "failed to truncate file")
+	}
+	_, err = f.Seek(0, 0)
+	if err != nil {
+		return errs.WithMessagef(err, "failed to seek file")
 	}
 	_, err = f.Write(metricsJSON)
 	if err != nil {

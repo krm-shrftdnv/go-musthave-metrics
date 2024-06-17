@@ -160,7 +160,7 @@ func main() {
 		}
 	}()
 
-	if cfg.StoreInterval > 0 && cfg.FileStoragePath != "" {
+	if cfg.StoreInterval > 0 {
 		go func() {
 			saveMetrics(ctx, cfg.StoreInterval)
 		}()
