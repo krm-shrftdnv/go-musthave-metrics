@@ -25,3 +25,6 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+
+cmd/agent/.env.local
+cmd/server/.env.local
