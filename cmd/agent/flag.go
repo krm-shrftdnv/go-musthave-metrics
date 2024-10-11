@@ -3,9 +3,8 @@ package main
 import (
 	"flag"
 	"log"
-	"os"
-	"strconv"
 
+	"github.com/caarlos0/env/v6"
 	"github.com/joho/godotenv"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 )
@@ -21,13 +20,8 @@ func parseFlags() {
 	if err := godotenv.Load(".env", ".env.local"); err != nil {
 		log.Println("No .env file found")
 	}
-	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
-		cfg.ServerAddress = envServerAddress
-	}
-	if envPollInterval := os.Getenv("POLL_INTERVAL"); envPollInterval != "" {
-		cfg.PollInterval, _ = strconv.ParseInt(envPollInterval, 10, 64)
-	}
-	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
-		cfg.ReportInterval, _ = strconv.ParseInt(envReportInterval, 10, 64)
+	err := env.Parse(&cfg)
+	if err != nil {
+		panic(err)
 	}
 }

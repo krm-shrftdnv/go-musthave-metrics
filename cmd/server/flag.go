@@ -3,10 +3,9 @@ package main
 import (
 	"flag"
 	"log"
-	"os"
 	"path/filepath"
-	"strconv"
 
+	"github.com/caarlos0/env/v6"
 	"github.com/joho/godotenv"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 )
@@ -29,22 +28,8 @@ func parseFlags() {
 	if err := godotenv.Load(".env", ".env.local"); err != nil {
 		log.Println("No .env file found")
 	}
-	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
-		cfg.ServerAddress = envServerAddress
-	}
-	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
-		cfg.LogLevel = envLogLevel
-	}
-	if envStoreInterval := os.Getenv("STORE_INTERVAL"); envStoreInterval != "" {
-		cfg.StoreInterval, _ = strconv.ParseInt(envStoreInterval, 10, 64)
-	}
-	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
-		cfg.FileStoragePath = envFileStoragePath
-	}
-	if envRestore := os.Getenv("RESTORE"); envRestore != "" {
-		cfg.Restore, _ = strconv.ParseBool(envRestore)
-	}
-	if envDatabaseDsn := os.Getenv("DATABASE_DSN"); envDatabaseDsn != "" {
-		cfg.DatabaseDsn = envDatabaseDsn
+	err = env.Parse(&cfg)
+	if err != nil {
+		panic(err)
 	}
 }
