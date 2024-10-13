@@ -51,7 +51,8 @@ func main() {
 	switch {
 	case cfg.DatabaseDsn != "":
 		{
-			database, err := db.Init(database, cfg.DatabaseDsn)
+			var err error
+			database, err = db.Init(cfg.DatabaseDsn)
 			if err != nil {
 				panic(err)
 			}

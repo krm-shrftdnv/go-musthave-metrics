@@ -14,11 +14,8 @@ import (
 
 const maxAttempts = 3
 
-func Init(db *sql.DB, databaseDsn string) (*sql.DB, error) {
-	if db != nil {
-		return db, nil
-	}
-	db, err := sql.Open("pgx", databaseDsn)
+func Init(databaseDsn string) (db *sql.DB, err error) {
+	db, err = sql.Open("pgx", databaseDsn)
 	i := 0
 	var pgErr *pgconn.PgError
 	for err != nil && errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ConnectionException && i < maxAttempts {
