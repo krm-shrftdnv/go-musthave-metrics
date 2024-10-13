@@ -17,9 +17,14 @@ cmd/agent/agent
 cmd/server/main
 cmd/server/server
 
+tmp/*
+
 # Dependency directories (remove the comment below to include it)
 vendor/
 
 # IDEs directories
 .idea
 .vscode
+
+cmd/agent/.env.local
+cmd/server/.env.local

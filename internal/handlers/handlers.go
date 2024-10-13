@@ -2,20 +2,23 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/db"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 )
 
 type UpdateMetricHandler struct {
-	GaugeStorage    *storage.MemStorage[internal.Gauge]
-	CounterStorage  *storage.MemStorage[internal.Counter]
+	GaugeStorage    storage.Storage[internal.Gauge]
+	CounterStorage  storage.Storage[internal.Counter]
 	FileStoragePath string
 }
 
@@ -44,7 +47,7 @@ func (h *UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Metric type should be \"gauge\" or \"counter\"", http.StatusBadRequest)
 	}
 	if h.FileStoragePath != "" {
-		err := storage.SingletonOperator.SaveAllMetrics(h.FileStoragePath)
+		err := storage.SingletonOperator.SaveAllMetrics(r.Context())
 		if err != nil {
 			logger.Log.Errorln(err)
 		}
@@ -65,8 +68,8 @@ func (h *UpdateMetricHandler) addCounter(key string, value internal.Counter) {
 }
 
 type StorageStateHandler struct {
-	GaugeStorage   *storage.MemStorage[internal.Gauge]
-	CounterStorage *storage.MemStorage[internal.Counter]
+	GaugeStorage   storage.Storage[internal.Gauge]
+	CounterStorage storage.Storage[internal.Counter]
 }
 
 func (h *StorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +89,8 @@ func (h *StorageStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 type MetricStateHandler struct {
-	GaugeStorage   *storage.MemStorage[internal.Gauge]
-	CounterStorage *storage.MemStorage[internal.Counter]
+	GaugeStorage   storage.Storage[internal.Gauge]
+	CounterStorage storage.Storage[internal.Counter]
 }
 
 func (h *MetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +182,52 @@ func (h *JSONUpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+type JSONUpdateMetricsHandler struct {
+	UpdateMetricHandler
+}
+
+func (h *JSONUpdateMetricsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var metrics []serializer.Metrics
+	var buf bytes.Buffer
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err = json.Unmarshal(buf.Bytes(), &metrics); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.addMetrics(metrics)
+	resp, err := json.Marshal(metrics)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(resp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *JSONUpdateMetricsHandler) addMetrics(metrics []serializer.Metrics) {
+	for _, metric := range metrics {
+		switch internal.MetricTypeName(metric.MType) {
+		case internal.GaugeName:
+			h.addGauge(metric.ID, *metric.Value)
+		case internal.CounterName:
+			h.addCounter(metric.ID, *metric.Delta)
+		}
+	}
+}
+
 type JSONStorageStateHandler struct {
 	StorageStateHandler
 }
@@ -254,4 +303,22 @@ func (h *JSONMetricStateHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+type DBPingHandler struct {
+	DB *sql.DB
+}
+
+func (h *DBPingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET requests are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	err := db.Ping(r.Context(), h.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
 }

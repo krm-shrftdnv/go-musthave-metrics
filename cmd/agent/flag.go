@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
-	"github.com/caarlos0/env/v6"
-	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"log"
+
+	"github.com/caarlos0/env/v6"
+	"github.com/joho/godotenv"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 )
 
 var cfg internal.Config
@@ -15,8 +17,11 @@ func parseFlags() {
 	flag.Int64Var(&cfg.ReportInterval, "r", 10, "report interval")
 	flag.Parse()
 
+	if err := godotenv.Load(".env", ".env.local"); err != nil {
+		log.Println("No .env file found")
+	}
 	err := env.Parse(&cfg)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
