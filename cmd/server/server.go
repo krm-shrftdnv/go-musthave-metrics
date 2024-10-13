@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
-	db2 "github.com/krm-shrftdnv/go-musthave-metrics/internal/db"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/db"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/handlers"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
@@ -36,7 +36,7 @@ func saveMetrics(ctx context.Context, storeInterval int64) {
 func main() {
 	var counterStorage storage.Storage[internal.Counter]
 	var gaugeStorage storage.Storage[internal.Gauge]
-	var db *sql.DB
+	var database *sql.DB
 	ctx := context.TODO()
 
 	parseFlags()
@@ -51,21 +51,21 @@ func main() {
 	switch {
 	case cfg.DatabaseDsn != "":
 		{
-			db, err := db2.Init(db, cfg.DatabaseDsn)
+			database, err := db.Init(database, cfg.DatabaseDsn)
 			if err != nil {
 				panic(err)
 			}
-			err = db2.CreateTable(ctx, db)
+			err = db.CreateTable(ctx, database)
 			if err != nil {
 				panic(err)
 			}
 			counterStorage = &storage.DBStorage[internal.Counter]{
 				MemStorage: counterMemStorage,
-				DB:         db,
+				DB:         database,
 			}
 			gaugeStorage = &storage.DBStorage[internal.Gauge]{
 				MemStorage: gaugeMemStorage,
-				DB:         db,
+				DB:         database,
 			}
 			break
 		}
@@ -124,7 +124,7 @@ func main() {
 		UpdateMetricHandler: updateMetricHandler,
 	}
 	dbPingHandler := handlers.DBPingHandler{
-		DB: db,
+		DB: database,
 	}
 
 	r := chi.NewRouter()
