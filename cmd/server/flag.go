@@ -23,6 +23,7 @@ func parseFlags() {
 	flag.StringVar(&cfg.FileStoragePath, "f", absPath, "file storage path")
 	flag.BoolVar(&cfg.Restore, "r", true, "restore from file")
 	flag.StringVar(&cfg.DatabaseDsn, "d", "", "database dsn")
+	flag.StringVar(&cfg.HashKey, "k", "", "hash key")
 	flag.Parse()
 
 	if err := godotenv.Load(".env", ".env.local"); err != nil {
