@@ -3,7 +3,6 @@ package hash
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"io"
 	"net/http"
 
 	customHttp "github.com/krm-shrftdnv/go-musthave-metrics/internal/http"
@@ -14,12 +13,66 @@ type hashWriter struct {
 	w       http.ResponseWriter
 }
 
-type hashReader struct {
-	hashKey string
-	r       io.ReadCloser
+func newHashWriter(hashKey string, w http.ResponseWriter) *hashWriter {
+	return &hashWriter{
+		hashKey: hashKey,
+		w:       w,
+	}
 }
 
-func New(key string) func(next http.HandlerFunc) http.HandlerFunc {
+func (h *hashWriter) Write(p []byte) (int, error) {
+	if h.hashKey != "" {
+		hash, err := hash(p, h.hashKey)
+		if err != nil {
+			return 0, err
+		}
+		_, err = h.w.Write([]byte(hash))
+		if err != nil {
+			return 0, err
+		}
+	}
+	return h.w.Write(p)
+}
+
+func (h *hashWriter) Header() http.Header {
+	return h.w.Header()
+}
+
+func (h *hashWriter) WriteHeader(statusCode int) {
+	h.w.WriteHeader(statusCode)
+}
+
+func New(key string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		hashFunc := func(w http.ResponseWriter, r *http.Request) {
+			ow := w
+			if key != "" {
+				acceptedHash := r.Header.Get("HashSHA256")
+				if acceptedHash != "" {
+					body := r.Body
+					var bodyBytes []byte
+					_, err := body.Read(bodyBytes)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+					hash, err := hash(bodyBytes, key)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+					if hash != acceptedHash {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+				}
+				hw := newHashWriter(key, w)
+				ow = hw
+			}
+			next.ServeHTTP(ow, r)
+		}
+		return http.HandlerFunc(hashFunc)
+	}
 }
 
 func HashRequest(key string) customHttp.Middleware {
