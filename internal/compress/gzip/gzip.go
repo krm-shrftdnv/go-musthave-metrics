@@ -129,9 +129,9 @@ func CompressRequest() customHttp.Middleware {
 			if header == nil {
 				header = make(http.Header)
 			}
-			if _, err := req.Body.Read(body); err != nil {
-				return nil, err
-			}
+			bodyBuffer := bytes.NewBuffer(body)
+			req.Body = io.NopCloser(bodyBuffer)
+			req.ContentLength = int64(bodyBuffer.Len())
 			header.Set("Content-Encoding", "gzip")
 			header.Set("Accept-Encoding", "gzip")
 			return rt.RoundTrip(req)

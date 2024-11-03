@@ -3,6 +3,8 @@ package hash
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"net/http"
 
 	customHttp "github.com/krm-shrftdnv/go-musthave-metrics/internal/http"
@@ -26,10 +28,7 @@ func (h *hashWriter) Write(p []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		_, err = h.w.Write([]byte(hash))
-		if err != nil {
-			return 0, err
-		}
+		h.w.Header().Set("HashSHA256", hash)
 	}
 	return h.w.Write(p)
 }
@@ -49,9 +48,7 @@ func New(key string) func(next http.Handler) http.Handler {
 			if key != "" {
 				acceptedHash := r.Header.Get("HashSHA256")
 				if acceptedHash != "" {
-					body := r.Body
-					var bodyBytes []byte
-					_, err := body.Read(bodyBytes)
+					bodyBytes, err := io.ReadAll(r.Body)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
 						return
@@ -61,7 +58,7 @@ func New(key string) func(next http.Handler) http.Handler {
 						w.WriteHeader(http.StatusInternalServerError)
 						return
 					}
-					if hash != acceptedHash {
+					if hmac.Equal([]byte(hash), []byte(acceptedHash)) {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
@@ -80,8 +77,7 @@ func HashRequest(key string) customHttp.Middleware {
 		return customHttp.InternalRoundTripper(func(req *http.Request) (*http.Response, error) {
 			if key != "" {
 				body := req.Body
-				var bodyBytes []byte
-				_, err := body.Read(bodyBytes)
+				bodyBytes, err := io.ReadAll(body)
 				if err != nil {
 					return nil, err
 				}
@@ -94,6 +90,7 @@ func HashRequest(key string) customHttp.Middleware {
 					header = make(http.Header)
 				}
 				header.Set("HashSHA256", hash)
+				req.Header = header
 			}
 			return rt.RoundTrip(req)
 		})
@@ -107,5 +104,5 @@ func hash(body []byte, hashKey string) (string, error) {
 		return "", err
 	}
 	dst := h.Sum(nil)
-	return string(dst), nil
+	return hex.EncodeToString(dst), nil
 }

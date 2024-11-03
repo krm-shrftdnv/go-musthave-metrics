@@ -16,7 +16,12 @@ func Chain(rt http.RoundTripper, middlewares ...Middleware) http.RoundTripper {
 	}
 
 	for _, m := range middlewares {
-		rt = m(rt)
+		if m == nil {
+			continue
+		}
+		if next := m(rt); next != nil {
+			rt = next
+		}
 	}
 
 	return rt

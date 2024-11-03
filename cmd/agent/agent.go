@@ -118,7 +118,8 @@ func main() {
 	for _, metricName := range metricNames {
 		gaugeMetrics.Set(metricName, internal.Metric[internal.Gauge]{Name: metricName})
 	}
-	client = resty.New().SetTransport(customHttp.Chain(nil, gzip.CompressRequest(), hash.HashRequest(cfg.HashKey)))
+	client = resty.New().
+		SetTransport(customHttp.Chain(nil, gzip.CompressRequest(), hash.HashRequest(cfg.HashKey)))
 	go func() {
 		poll()
 	}()
