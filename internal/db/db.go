@@ -64,7 +64,7 @@ func CreateTable(ctx context.Context, db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS metrics (
 			id VARCHAR PRIMARY KEY,
 			mtype VARCHAR NOT NULL,
-			delta INT DEFAULT NULL,
+			delta BIGINT DEFAULT NULL,
 			mvalue FLOAT DEFAULT NULL
 		)
 	`)
