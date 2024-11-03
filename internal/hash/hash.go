@@ -58,7 +58,7 @@ func New(key string) func(next http.Handler) http.Handler {
 						w.WriteHeader(http.StatusInternalServerError)
 						return
 					}
-					if hmac.Equal([]byte(hash), []byte(acceptedHash)) {
+					if !hmac.Equal([]byte(hash), []byte(acceptedHash)) {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
@@ -76,8 +76,7 @@ func HashRequest(key string) customHttp.Middleware {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return customHttp.InternalRoundTripper(func(req *http.Request) (*http.Response, error) {
 			if key != "" {
-				body := req.Body
-				bodyBytes, err := io.ReadAll(body)
+				bodyBytes, err := io.ReadAll(req.Body)
 				if err != nil {
 					return nil, err
 				}
