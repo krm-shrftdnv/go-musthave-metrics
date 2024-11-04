@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/hash"
 	customHttp "github.com/krm-shrftdnv/go-musthave-metrics/internal/http"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/serializer"
@@ -118,8 +119,7 @@ func main() {
 		gaugeMetrics.Set(metricName, internal.Metric[internal.Gauge]{Name: metricName})
 	}
 	client = resty.New().
-		//SetTransport(customHttp.Chain(nil, gzip.CompressRequest(), hash.HashRequest(cfg.HashKey)))
-		SetTransport(customHttp.Chain(nil, hash.HashRequest(cfg.HashKey)))
+		SetTransport(customHttp.Chain(nil, gzip.CompressRequest(), hash.HashRequest(cfg.HashKey)))
 	go func() {
 		poll()
 	}()
