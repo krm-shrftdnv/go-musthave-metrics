@@ -59,6 +59,7 @@ func New(key string) func(next http.Handler) http.Handler {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
+					r.Body = io.NopCloser(bytes.NewReader(body))
 					hash, err := hash(body, key)
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
