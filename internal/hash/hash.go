@@ -49,14 +49,19 @@ func New(key string) func(next http.Handler) http.Handler {
 			if key != "" {
 				acceptedHash := r.Header.Get("HashSHA256")
 				if acceptedHash != "" {
-					bodyBytes, err := io.ReadAll(r.Body)
+					body, err := io.ReadAll(r.Body)
 					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
+						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
-					hash, err := hash(bodyBytes, key)
+					err = r.Body.Close()
 					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					hash, err := hash(body, key)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
 					if !hmac.Equal([]byte(hash), []byte(acceptedHash)) {
