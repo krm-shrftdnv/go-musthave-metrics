@@ -102,6 +102,7 @@ func HashRequest(key string) customHttp.Middleware {
 				header.Set("HashSHA256", hash)
 				req.Header = header
 				req.Body = io.NopCloser(bytes.NewReader(body))
+				req.ContentLength = int64(len(body))
 			}
 			return rt.RoundTrip(req)
 		})
