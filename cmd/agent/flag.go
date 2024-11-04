@@ -15,6 +15,7 @@ func parseFlags() {
 	flag.StringVar(&cfg.ServerAddress, "a", "localhost:8080", "address and port to run server")
 	flag.Int64Var(&cfg.PollInterval, "p", 2, "poll interval")
 	flag.Int64Var(&cfg.ReportInterval, "r", 10, "report interval")
+	flag.StringVar(&cfg.HashKey, "k", "", "hash key")
 	flag.Parse()
 
 	if err := godotenv.Load(".env", ".env.local"); err != nil {

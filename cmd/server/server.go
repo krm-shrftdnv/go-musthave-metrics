@@ -15,6 +15,7 @@ import (
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/compress/gzip"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/db"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/handlers"
+	"github.com/krm-shrftdnv/go-musthave-metrics/internal/hash"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/logger"
 	"github.com/krm-shrftdnv/go-musthave-metrics/internal/storage"
 )
@@ -133,6 +134,7 @@ func main() {
 		middleware.StripSlashes,
 		logger.RequestWithLogging,
 		gzip.CompressRequestBody,
+		hash.New(cfg.HashKey),
 	)
 
 	r.Route("/update", func(r chi.Router) {

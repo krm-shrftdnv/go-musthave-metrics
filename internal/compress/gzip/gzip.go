@@ -3,10 +3,11 @@ package gzip
 import (
 	"bytes"
 	"compress/gzip"
-	"github.com/go-resty/resty/v2"
 	"io"
 	"net/http"
 	"strings"
+
+	customHttp "github.com/krm-shrftdnv/go-musthave-metrics/internal/http"
 )
 
 type compressWriter struct {
@@ -110,19 +111,35 @@ func CompressRequestBody(h http.Handler) http.Handler {
 	return http.HandlerFunc(gzipFn)
 }
 
-type CompressedRequest struct {
-	*resty.Request
-}
-
-func (cr *CompressedRequest) SetBody(body []byte) *CompressedRequest {
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	if _, err := gz.Write(body); err != nil {
-		return nil
+func CompressRequest() customHttp.Middleware {
+	return func(rt http.RoundTripper) http.RoundTripper {
+		return customHttp.InternalRoundTripper(func(req *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			err = req.Body.Close()
+			if err != nil {
+				return nil, err
+			}
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			if _, err := gz.Write(body); err != nil {
+				return nil, err
+			}
+			if err := gz.Close(); err != nil {
+				return nil, err
+			}
+			header := req.Header
+			if header == nil {
+				header = make(http.Header)
+			}
+			header.Set("Content-Encoding", "gzip")
+			header.Set("Accept-Encoding", "gzip")
+			req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+			req.ContentLength = int64(buf.Len())
+			req.Header = header
+			return rt.RoundTrip(req)
+		})
 	}
-	defer gz.Close()
-	cr.Request.SetBody(&buf)
-	cr.Request.SetHeader("Content-Encoding", "gzip")
-	cr.Request.SetHeader("Accept-Encoding", "gzip")
-	return cr
 }
