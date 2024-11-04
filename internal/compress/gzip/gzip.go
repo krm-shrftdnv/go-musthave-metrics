@@ -115,7 +115,10 @@ func CompressRequest() customHttp.Middleware {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return customHttp.InternalRoundTripper(func(req *http.Request) (*http.Response, error) {
 			body, err := io.ReadAll(req.Body)
-			req.Body.Close()
+			if err != nil {
+				return nil, err
+			}
+			err = req.Body.Close()
 			if err != nil {
 				return nil, err
 			}
@@ -131,10 +134,11 @@ func CompressRequest() customHttp.Middleware {
 			if header == nil {
 				header = make(http.Header)
 			}
-			req.Body = io.NopCloser(&buf)
-			req.ContentLength = int64(buf.Len())
 			header.Set("Content-Encoding", "gzip")
 			header.Set("Accept-Encoding", "gzip")
+			req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+			req.ContentLength = int64(buf.Len())
+			req.Header = header
 			return rt.RoundTrip(req)
 		})
 	}

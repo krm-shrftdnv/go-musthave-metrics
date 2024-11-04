@@ -1,6 +1,7 @@
 package hash
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -76,11 +77,15 @@ func HashRequest(key string) customHttp.Middleware {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return customHttp.InternalRoundTripper(func(req *http.Request) (*http.Response, error) {
 			if key != "" {
-				bodyBytes, err := io.ReadAll(req.Body)
+				body, err := io.ReadAll(req.Body)
 				if err != nil {
 					return nil, err
 				}
-				hash, err := hash(bodyBytes, key)
+				err = req.Body.Close()
+				if err != nil {
+					return nil, err
+				}
+				hash, err := hash(body, key)
 				if err != nil {
 					return nil, err
 				}
@@ -90,6 +95,7 @@ func HashRequest(key string) customHttp.Middleware {
 				}
 				header.Set("HashSHA256", hash)
 				req.Header = header
+				req.Body = io.NopCloser(bytes.NewReader(body))
 			}
 			return rt.RoundTrip(req)
 		})
